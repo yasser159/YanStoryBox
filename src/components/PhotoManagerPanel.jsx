@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 
 function EmptyState({ isHydrating }) {
   return (
@@ -20,48 +20,19 @@ export function PhotoManagerPanel({
   removeSlide,
   audioMeta,
   audioError,
-  uploadAudioFile,
   className = '',
+  style,
+  embedded = false,
 }) {
-  const fileInputRef = useRef(null);
-  const audioInputRef = useRef(null);
   const [draggedId, setDraggedId] = useState('');
 
-  const handleFileChange = async (event) => {
-    const { files } = event.target;
-    await uploadFiles(files);
-    event.target.value = '';
-  };
-
-  const handleAudioChange = async (event) => {
-    const [file] = Array.from(event.target.files || []);
-    await uploadAudioFile(file);
-    event.target.value = '';
-  };
-
   return (
-    <article className={`rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/20 backdrop-blur ${className}`}>
+    <article className={`${embedded ? 'rounded-[1.5rem] border border-white/10 bg-white/5 p-4 shadow-xl shadow-black/20 backdrop-blur sm:p-5' : 'rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/20 backdrop-blur'} ${className}`} style={style}>
       <div className="flex justify-center">
         <div className="rounded-full border border-white/10 bg-stone-950/50 px-4 py-2 text-sm text-stone-300">
           Track: <span className="font-semibold text-stone-100">{audioMeta.fileName}</span>
         </div>
       </div>
-
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={handleFileChange}
-      />
-      <input
-        ref={audioInputRef}
-        type="file"
-        accept="audio/*"
-        className="hidden"
-        onChange={handleAudioChange}
-      />
 
       {persistenceError ? (
         <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">
@@ -79,8 +50,8 @@ export function PhotoManagerPanel({
         {!uploads.length ? (
           <EmptyState isHydrating={isHydrating} />
         ) : (
-          <div className="flex justify-center">
-            <div className="grid gap-2 grid-cols-4 sm:grid-cols-5 xl:grid-cols-7">
+          <div className="w-full">
+            <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(clamp(4rem,9vw,6.5rem),1fr))] gap-2">
             {uploads.map((slide, index) => {
               const isActive = slide.id === activeSlideId;
               const isDragging = draggedId === slide.id;
@@ -130,22 +101,6 @@ export function PhotoManagerPanel({
         )}
       </div>
 
-      <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="inline-flex items-center justify-center rounded-full bg-orange-400 px-5 py-3 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
-        >
-          Upload Photos
-        </button>
-        <button
-          type="button"
-          onClick={() => audioInputRef.current?.click()}
-          className="inline-flex items-center justify-center rounded-full bg-orange-400 px-5 py-3 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
-        >
-          Upload Audio
-        </button>
-      </div>
     </article>
   );
 }

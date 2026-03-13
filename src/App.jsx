@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { PhotoManagerPanel } from './components/PhotoManagerPanel';
 import { PlayerControlsBar, StoryPlayerPanel } from './components/StoryPlayerPanel';
 import { useAudioLibrary } from './hooks/useAudioLibrary';
@@ -7,6 +7,8 @@ import { useStoryPlayer } from './hooks/useStoryPlayer';
 
 export default function App() {
   const [showOverlayControls, setShowOverlayControls] = useState(false);
+  const photoInputRef = useRef(null);
+  const audioInputRef = useRef(null);
   const {
     audioSrc,
     uploadAudioFile,
@@ -35,9 +37,36 @@ export default function App() {
     setShowOverlayControls(relativeY >= lowerTriggerStart);
   };
 
+  const handlePhotoInputChange = async (event) => {
+    const { files } = event.target;
+    await uploadFiles(files);
+    event.target.value = '';
+  };
+
+  const handleAudioInputChange = async (event) => {
+    const [file] = Array.from(event.target.files || []);
+    await uploadAudioFile(file);
+    event.target.value = '';
+  };
+
   return (
     <main className="h-[100dvh] min-h-[100svh] w-full overflow-hidden">
       <audio ref={audioRef} />
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handlePhotoInputChange}
+      />
+      <input
+        ref={audioInputRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={handleAudioInputChange}
+      />
 
       <div className="mx-auto h-full max-w-none">
         <section
@@ -67,6 +96,8 @@ export default function App() {
                 playerState={playerState}
                 togglePlayback={togglePlayback}
                 rewind={rewind}
+                onUploadPhotos={() => photoInputRef.current?.click()}
+                onUploadAudio={() => audioInputRef.current?.click()}
               />
               <PhotoManagerPanel
                 uploads={uploads}
@@ -78,7 +109,6 @@ export default function App() {
                 removeSlide={removeSlide}
                 audioMeta={audioMeta}
                 audioError={audioError}
-                uploadAudioFile={uploadAudioFile}
                 embedded
                 className="media-tray h-full min-h-0 overflow-auto"
               />

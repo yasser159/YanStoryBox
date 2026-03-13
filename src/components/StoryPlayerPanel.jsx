@@ -33,6 +33,8 @@ export function PlayerControlsBar({
   playerState,
   togglePlayback,
   rewind,
+  onUploadPhotos,
+  onUploadAudio,
 }) {
   const progress = playerState.duration > 0
     ? Math.min(100, (playerState.currentTime / playerState.duration) * 100)
@@ -50,7 +52,7 @@ export function PlayerControlsBar({
           style={{ width: `${progress}%` }}
         />
       </div>
-      <div className="mt-4 flex justify-center gap-3">
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
         <button
           type="button"
           onClick={rewind}
@@ -67,6 +69,20 @@ export function PlayerControlsBar({
         >
           {playerState.isPlaying ? <PauseIcon /> : <PlayIcon />}
         </button>
+        <button
+          type="button"
+          onClick={onUploadPhotos}
+          className="inline-flex items-center justify-center rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
+        >
+          Upload Photos
+        </button>
+        <button
+          type="button"
+          onClick={onUploadAudio}
+          className="inline-flex items-center justify-center rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
+        >
+          Upload Audio
+        </button>
       </div>
     </div>
   );
@@ -82,14 +98,7 @@ export function StoryPlayerPanel({
   return (
     <section className="h-full min-h-[100svh]">
       <article className={`scene-shell relative h-full min-h-[100svh] overflow-hidden border-0 bg-stone-900 shadow-2xl shadow-black/40 ${className}`}>
-        <img
-          key={activeSlide?.id}
-          src={activeSlide?.src}
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 h-full w-full scale-105 object-cover object-center opacity-55 blur-xl transition duration-700 ease-out"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-950/35 to-stone-950/10" />
+        <div className="absolute inset-0 bg-black" />
         <div className="absolute inset-0 z-10 flex items-center justify-center p-0">
           <img
             key={`${activeSlide?.id}-detail`}
