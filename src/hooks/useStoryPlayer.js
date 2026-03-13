@@ -16,8 +16,8 @@ export function useStoryPlayer({ audioSrc, slides }) {
   });
 
   const timeline = useMemo(
-    () => buildTimeline(slides, 120),
-    [slides],
+    () => buildTimeline(slides, playerState.duration || 0),
+    [playerState.duration, slides],
   );
 
   useEffect(() => {

@@ -1,3 +1,5 @@
+import { AnimatePresence, motion } from 'framer-motion';
+
 function formatTime(totalSeconds) {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds || 0));
   const minutes = Math.floor(safeSeconds / 60);
@@ -58,7 +60,12 @@ export function PlayerControlsBar({
     : 0;
 
   return (
-    <div className="w-full rounded-[1.5rem] border border-white/10 bg-black/45 p-3 backdrop-blur sm:p-4">
+    <motion.div
+      className="w-full rounded-[1.5rem] border border-white/10 bg-black/45 p-3 backdrop-blur sm:p-4"
+      initial={false}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+    >
       <div className="mb-2 flex items-center justify-between gap-3 text-sm text-stone-200">
         <div className="max-w-[45vw] truncate rounded-full border border-white/10 bg-stone-950/50 px-3 py-1 text-xs font-medium text-stone-200 sm:max-w-[28rem]">
           Track: <span className="font-semibold text-stone-100">{audioMeta?.fileName || 'demo-story.wav'}</span>
@@ -108,12 +115,20 @@ export function PlayerControlsBar({
           Upload Audio
         </button>
       </div>
-      {isUploadingPhotos ? (
-        <div className="mt-3 text-center text-xs font-medium uppercase tracking-[0.2em] text-orange-100/85">
-          Loading images to Firebase storage. Wait a beat.
-        </div>
-      ) : null}
-    </div>
+      <AnimatePresence initial={false}>
+        {isUploadingPhotos ? (
+          <motion.div
+            className="mt-3 text-center text-xs font-medium uppercase tracking-[0.2em] text-orange-100/85"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+          >
+            Loading images to Firebase storage. Wait a beat.
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -133,7 +148,7 @@ export function StoryPlayerPanel({
             key={`${activeSlide?.id}-detail`}
             src={activeSlide?.src}
             alt={activeSlide?.title}
-            className="block h-full w-full object-contain object-center transition duration-700 ease-out"
+            className="block h-full w-full object-contain object-center"
           />
         </div>
       </article>

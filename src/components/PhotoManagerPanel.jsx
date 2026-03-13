@@ -15,10 +15,8 @@ export function PhotoManagerPanel({
   activeSlideId,
   isHydrating,
   persistenceError,
-  uploadFiles,
   reorderSlides,
   removeSlide,
-  audioMeta,
   audioError,
   className = '',
   style,
@@ -45,7 +43,7 @@ export function PhotoManagerPanel({
           <EmptyState isHydrating={isHydrating} />
         ) : (
           <div className="w-full">
-            <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(clamp(4rem,9vw,6.5rem),1fr))] gap-2">
+            <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(4rem,10rem))] justify-center gap-2">
             {uploads.map((slide, index) => {
               const isActive = slide.id === activeSlideId;
               const isDragging = draggedId === slide.id;

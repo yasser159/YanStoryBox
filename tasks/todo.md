@@ -12,6 +12,8 @@
 - [x] Move media persistence to Firebase BigBackEnd project
 - [x] Restore photo uploads when Firebase Storage is unavailable from local development
 - [x] Show an upload-in-progress wait state while photos are being sent to Firebase Storage
+- [x] Replace key React UI transitions with Framer Motion
+- [x] Drive slide timing from the actual track length instead of a fixed two-minute placeholder
 
 # Notes
 
@@ -24,6 +26,8 @@
 - Playback decision: changing slide order must not recreate the audio element or reset playback time.
 - Resilience decision: when Firebase Storage rejects local-origin uploads, photos should fall back to browser-local persistence instead of failing silently.
 - Feedback decision: photo uploads should expose an explicit in-progress wait state in the control bar so users know the app is busy talking to Firebase.
+- Motion decision: default React animation library for this app is Framer Motion, used for scene swaps, overlay reveals, and thumbnail entrance/layout motion.
+- Timing decision: slide switches should be computed from the real loaded audio duration divided by the current slide count, so uploaded tracks pace uploaded photos correctly.
 
 # Kill List
 
@@ -45,6 +49,8 @@
 - Switched media persistence to Firebase `bigbackend-60150` using Storage for uploaded files and Firestore for shared presentation metadata/order.
 - Added a local fallback path for photo uploads so Firebase Storage failures on localhost still produce thumbnails, persist in IndexedDB, and emit explicit fallback diagnostics.
 - Added a visible upload-in-progress state for photos so the Upload button switches to a spinner and wait copy while Firebase Storage work is in flight.
+- Replaced the main scene swap, lower media overlay reveal, and thumbnail card motion with Framer Motion instead of plain CSS-only transitions.
+- Updated the slideshow timeline to rebuild from the loaded audio duration, so uploaded photos switch based on `track length / photo count` instead of a hardcoded 120-second assumption.
 - Verification: `npm run build` passed on 2026-03-13 after the audio upload changes.
 - Verification: Playwright confirmed on 2026-03-13 that the fullscreen stage no longer grows taller than the viewport (`scrollHeight === innerHeight`), top-half hover hides overlays, and lower hover reveals the controls plus thumbnail tray inside the visible screen.
 - Verification: Playwright confirmed on 2026-03-13 that selecting a photo on localhost creates a visible thumb immediately, survives refresh, and logs `photos.upload_fell_back_to_local` when Firebase Storage rejects the upload.

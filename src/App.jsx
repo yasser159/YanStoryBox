@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 import { PhotoManagerPanel } from './components/PhotoManagerPanel';
 import { PlayerControlsBar, StoryPlayerPanel } from './components/StoryPlayerPanel';
 import { useAudioLibrary } from './hooks/useAudioLibrary';
@@ -104,17 +105,22 @@ export default function App() {
             playerState={playerState}
             timeline={timeline}
           />
-          <div
-            className={`media-overlay absolute inset-x-0 z-40 transition-all duration-300 ${
+          <motion.div
+            className={`media-overlay absolute inset-x-0 z-40 ${
               showOverlayControls || overlayPinned
-                ? 'visible pointer-events-auto translate-y-0 opacity-100'
-                : 'invisible pointer-events-none translate-y-full opacity-0'
+                ? 'visible pointer-events-auto'
+                : 'invisible pointer-events-none'
             }`}
             style={{
               top: '55dvh',
               bottom: 'max(0.75rem, env(safe-area-inset-bottom))',
               width: '100%',
             }}
+            initial={false}
+            animate={showOverlayControls || overlayPinned
+              ? { opacity: 1, y: 0 }
+              : { opacity: 0, y: 72 }}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="mx-auto flex h-full w-full max-w-none flex-col gap-4">
               <PlayerControlsBar
@@ -140,7 +146,7 @@ export default function App() {
                 className="media-tray h-full min-h-0 overflow-auto"
               />
             </div>
-          </div>
+          </motion.div>
         </section>
       </div>
     </main>
