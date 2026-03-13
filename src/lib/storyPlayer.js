@@ -132,6 +132,19 @@ export class StoryPlayer {
     this.audio.pause();
   }
 
+  rewind() {
+    logEvent('info', 'player.rewind_requested', {
+      previousTime: this.audio.currentTime || 0,
+    });
+    this.audio.currentTime = 0;
+    this.setState({
+      currentTime: 0,
+      activeSlideIndex: 0,
+      status: this.audio.paused ? 'ready' : this.state.status,
+      error: '',
+    });
+  }
+
   togglePlayback() {
     if (this.audio.paused) {
       this.play();

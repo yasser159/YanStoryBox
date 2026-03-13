@@ -5,10 +5,35 @@ function formatTime(totalSeconds) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
+function PlayIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-current">
+      <path d="M8.75 6.2c0-1.02 1.1-1.66 1.99-1.15l8.11 4.67c.89.51.89 1.79 0 2.3l-8.11 4.67c-.89.51-1.99-.13-1.99-1.15V6.2Z" />
+    </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-current">
+      <path d="M7.75 5.5A1.25 1.25 0 0 1 9 6.75v10.5A1.25 1.25 0 0 1 7.75 18.5h-.5A1.25 1.25 0 0 1 6 17.25V6.75A1.25 1.25 0 0 1 7.25 5.5h.5Zm9 0A1.25 1.25 0 0 1 18 6.75v10.5A1.25 1.25 0 0 1 16.75 18.5h-.5A1.25 1.25 0 0 1 15 17.25V6.75a1.25 1.25 0 0 1 1.25-1.25h.5Z" />
+    </svg>
+  );
+}
+
+function RewindIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-5 w-5 fill-current">
+      <path d="M11.02 6.08c.77-.56 1.85-.01 1.85.94v9.96c0 .95-1.08 1.5-1.85.94L4.1 13.01a1.25 1.25 0 0 1 0-2.02l6.92-4.91Zm8 0c.77-.56 1.85-.01 1.85.94v9.96c0 .95-1.08 1.5-1.85.94l-6.92-4.91a1.25 1.25 0 0 1 0-2.02l6.92-4.91Z" />
+    </svg>
+  );
+}
+
 export function StoryPlayerPanel({
   playerState,
   timeline,
   togglePlayback,
+  rewind,
 }) {
   const activeSlide = timeline[playerState.activeSlideIndex] ?? timeline[0];
   const progress = playerState.duration > 0
@@ -17,16 +42,16 @@ export function StoryPlayerPanel({
 
   return (
     <section>
-      <article className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-stone-900/70 shadow-2xl shadow-black/40">
+      <article className="group relative min-h-screen overflow-hidden border-0 bg-stone-900 shadow-2xl shadow-black/40">
         <img
           key={activeSlide?.id}
           src={activeSlide?.src}
           alt={activeSlide?.title}
-          className="h-[24rem] w-full object-cover object-center transition duration-700 ease-out"
+          className="h-screen w-full object-cover object-center transition duration-700 ease-out"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-950/30 to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 translate-y-4 px-6 pb-6 opacity-0 transition duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-          <div className="rounded-[1.5rem] border border-white/10 bg-black/45 p-4 backdrop-blur">
+        <div className="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-950/25 to-transparent" />
+        <div className="absolute inset-x-0 bottom-[19rem] z-40 flex translate-y-4 px-4 opacity-0 transition duration-300 group-hover:translate-y-0 group-hover:opacity-100 sm:bottom-[20rem] sm:px-6">
+          <div className="w-full rounded-[1.5rem] border border-white/10 bg-black/45 p-4 backdrop-blur">
             <div className="mb-2 flex justify-between text-sm text-stone-200">
               <span>{formatTime(playerState.currentTime)}</span>
               <span>{formatTime(playerState.duration || 120)}</span>
@@ -37,21 +62,32 @@ export function StoryPlayerPanel({
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <button
-              type="button"
-              onClick={togglePlayback}
-              className="mt-4 inline-flex items-center justify-center rounded-full bg-orange-400 px-5 py-2.5 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
-            >
-              {playerState.isPlaying ? 'Pause' : 'Play'}
-            </button>
+            <div className="mt-4 flex justify-center gap-3">
+              <button
+                type="button"
+                onClick={rewind}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-stone-100 transition hover:bg-white/20"
+                aria-label="Rewind"
+              >
+                <RewindIcon />
+              </button>
+              <button
+                type="button"
+                onClick={togglePlayback}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-orange-400 text-stone-950 transition hover:bg-orange-300"
+                aria-label={playerState.isPlaying ? 'Pause' : 'Play'}
+              >
+                {playerState.isPlaying ? <PauseIcon /> : <PlayIcon />}
+              </button>
+            </div>
           </div>
         </div>
-        <div className="absolute inset-x-0 bottom-0 p-6">
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-4 sm:p-6 md:p-8">
           <p className="text-xs uppercase tracking-[0.35em] text-orange-300/80">
             Slide {playerState.activeSlideIndex + 1} / {timeline.length}
           </p>
-          <h2 className="mt-2 text-3xl font-semibold text-stone-50">{activeSlide?.title}</h2>
-          <p className="mt-2 max-w-xl text-sm text-stone-200/90">{activeSlide?.caption}</p>
+          <h2 className="mt-2 max-w-3xl text-3xl font-semibold text-stone-50 sm:text-4xl md:text-5xl">{activeSlide?.title}</h2>
+          <p className="mt-2 max-w-2xl text-sm text-stone-200/90 sm:text-base">{activeSlide?.caption}</p>
         </div>
       </article>
     </section>

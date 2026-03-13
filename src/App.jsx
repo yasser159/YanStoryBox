@@ -1,5 +1,3 @@
-import { AudioManagerPanel } from './components/AudioManagerPanel';
-import { DiagnosticsScreen } from './components/DiagnosticsScreen';
 import { PhotoManagerPanel } from './components/PhotoManagerPanel';
 import { StoryPlayerPanel } from './components/StoryPlayerPanel';
 import { useAudioLibrary } from './hooks/useAudioLibrary';
@@ -9,65 +7,50 @@ import { useStoryPlayer } from './hooks/useStoryPlayer';
 export default function App() {
   const {
     audioSrc,
-    audioMeta,
-    hasUploadedAudio,
-    audioSourceMode,
     uploadAudioFile,
-    resetAudio,
-    isHydratingAudio,
     audioError,
+    audioMeta,
   } = useAudioLibrary();
   const {
     slides,
     uploads,
-    hasUploads,
-    sourceMode,
     uploadFiles,
     reorderSlides,
     removeSlide,
-    resetUploads,
     isHydrating,
     persistenceError,
   } = useSlideLibrary();
-  const { audioRef, playerState, timeline, togglePlayback } = useStoryPlayer({
+  const { audioRef, playerState, timeline, togglePlayback, rewind } = useStoryPlayer({
     audioSrc,
     slides,
   });
   const activeSlide = timeline[playerState.activeSlideIndex] ?? timeline[0];
 
   return (
-    <main className="min-h-screen px-4 py-8 sm:px-6 lg:px-10">
+    <main className="min-h-screen">
       <audio ref={audioRef} />
 
-      <div className="mx-auto max-w-7xl">
-        <section className="space-y-6">
+      <div className="mx-auto min-h-screen max-w-none">
+        <section className="group relative min-h-screen overflow-hidden">
           <StoryPlayerPanel
             playerState={playerState}
             timeline={timeline}
             togglePlayback={togglePlayback}
-          />
-          <AudioManagerPanel
-            audioMeta={audioMeta}
-            audioSourceMode={audioSourceMode}
-            hasUploadedAudio={hasUploadedAudio}
-            isHydratingAudio={isHydratingAudio}
-            audioError={audioError}
-            uploadAudioFile={uploadAudioFile}
-            resetAudio={resetAudio}
+            rewind={rewind}
           />
           <PhotoManagerPanel
             uploads={uploads}
             activeSlideId={activeSlide?.id}
-            hasUploads={hasUploads}
             isHydrating={isHydrating}
             persistenceError={persistenceError}
-            sourceMode={sourceMode}
             uploadFiles={uploadFiles}
             reorderSlides={reorderSlides}
             removeSlide={removeSlide}
-            resetUploads={resetUploads}
+            audioMeta={audioMeta}
+            audioError={audioError}
+            uploadAudioFile={uploadAudioFile}
+            className="pointer-events-none absolute inset-x-0 bottom-0 z-30 mx-auto w-full max-w-6xl px-4 pb-4 translate-y-6 opacity-0 transition-all duration-300 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100 sm:px-6 sm:pb-6"
           />
-          <DiagnosticsScreen />
         </section>
       </div>
     </main>

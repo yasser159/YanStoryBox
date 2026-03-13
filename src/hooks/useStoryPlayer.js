@@ -57,6 +57,7 @@ export function useStoryPlayer({ audioSrc, slides }) {
     playerState,
     timeline,
     togglePlayback: () => playerRef.current?.togglePlayback(),
+    rewind: () => playerRef.current?.rewind(),
     pause: () => playerRef.current?.pause(),
   };
 }

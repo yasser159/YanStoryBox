@@ -13,16 +13,18 @@ function EmptyState({ isHydrating }) {
 export function PhotoManagerPanel({
   uploads,
   activeSlideId,
-  hasUploads,
   isHydrating,
   persistenceError,
-  sourceMode,
   uploadFiles,
   reorderSlides,
   removeSlide,
-  resetUploads,
+  audioMeta,
+  audioError,
+  uploadAudioFile,
+  className = '',
 }) {
   const fileInputRef = useRef(null);
+  const audioInputRef = useRef(null);
   const [draggedId, setDraggedId] = useState('');
 
   const handleFileChange = async (event) => {
@@ -31,47 +33,35 @@ export function PhotoManagerPanel({
     event.target.value = '';
   };
 
+  const handleAudioChange = async (event) => {
+    const [file] = Array.from(event.target.files || []);
+    await uploadAudioFile(file);
+    event.target.value = '';
+  };
+
   return (
-    <article className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/20 backdrop-blur">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.35em] text-orange-300/80">Photo Manager</p>
-          <h2 className="mt-2 text-3xl font-semibold text-stone-50">Upload and sort your shots</h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-300">
-            This is the lineup board. Drop in your images, drag them around, and the story reel follows that order.
-          </p>
-        </div>
-
+    <article className={`rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/20 backdrop-blur ${className}`}>
+      <div className="flex justify-center">
         <div className="rounded-full border border-white/10 bg-stone-950/50 px-4 py-2 text-sm text-stone-300">
-          Source: <span className="font-semibold capitalize text-stone-100">{sourceMode}</span>
+          Track: <span className="font-semibold text-stone-100">{audioMeta.fileName}</span>
         </div>
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="inline-flex items-center justify-center rounded-full bg-orange-400 px-5 py-3 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
-        >
-          Upload Photos
-        </button>
-        <button
-          type="button"
-          onClick={resetUploads}
-          disabled={!hasUploads}
-          className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-5 py-3 text-sm font-semibold text-stone-100 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Reset To Demo
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={handleFileChange}
-        />
-      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        className="hidden"
+        onChange={handleFileChange}
+      />
+      <input
+        ref={audioInputRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={handleAudioChange}
+      />
 
       {persistenceError ? (
         <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">
@@ -79,11 +69,18 @@ export function PhotoManagerPanel({
         </div>
       ) : null}
 
+      {audioError ? (
+        <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">
+          {audioError}
+        </div>
+      ) : null}
+
       <div className="mt-6">
         {!uploads.length ? (
           <EmptyState isHydrating={isHydrating} />
         ) : (
-          <div className="grid gap-2 grid-cols-4 sm:grid-cols-5 xl:grid-cols-7">
+          <div className="flex justify-center">
+            <div className="grid gap-2 grid-cols-4 sm:grid-cols-5 xl:grid-cols-7">
             {uploads.map((slide, index) => {
               const isActive = slide.id === activeSlideId;
               const isDragging = draggedId === slide.id;
@@ -128,8 +125,26 @@ export function PhotoManagerPanel({
                 </div>
               );
             })}
+            </div>
           </div>
         )}
+      </div>
+
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="inline-flex items-center justify-center rounded-full bg-orange-400 px-5 py-3 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
+        >
+          Upload Photos
+        </button>
+        <button
+          type="button"
+          onClick={() => audioInputRef.current?.click()}
+          className="inline-flex items-center justify-center rounded-full bg-orange-400 px-5 py-3 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
+        >
+          Upload Audio
+        </button>
       </div>
     </article>
   );
