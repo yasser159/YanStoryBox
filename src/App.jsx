@@ -7,6 +7,7 @@ import { useStoryPlayer } from './hooks/useStoryPlayer';
 
 export default function App() {
   const [showOverlayControls, setShowOverlayControls] = useState(false);
+  const [overlayPinned, setOverlayPinned] = useState(false);
   const photoInputRef = useRef(null);
   const audioInputRef = useRef(null);
   const {
@@ -22,6 +23,7 @@ export default function App() {
     reorderSlides,
     removeSlide,
     isHydrating,
+    isUploadingPhotos,
     persistenceError,
   } = useSlideLibrary();
   const { audioRef, playerState, timeline, togglePlayback, rewind } = useStoryPlayer({
@@ -38,15 +40,33 @@ export default function App() {
   };
 
   const handlePhotoInputChange = async (event) => {
+    setOverlayPinned(true);
     const { files } = event.target;
     await uploadFiles(files);
     event.target.value = '';
+    setOverlayPinned(false);
   };
 
   const handleAudioInputChange = async (event) => {
+    setOverlayPinned(true);
     const [file] = Array.from(event.target.files || []);
     await uploadAudioFile(file);
     event.target.value = '';
+    setOverlayPinned(false);
+  };
+
+  const openPicker = (inputRef) => {
+    setOverlayPinned(true);
+
+    const releasePin = () => {
+      window.removeEventListener('focus', releasePin);
+      window.setTimeout(() => {
+        setOverlayPinned(false);
+      }, 300);
+    };
+
+    window.addEventListener('focus', releasePin, { once: true });
+    inputRef.current?.click();
   };
 
   return (
@@ -73,7 +93,12 @@ export default function App() {
           className="scene-stage relative h-full overflow-hidden"
           style={{ width: '100%', height: '100dvh' }}
           onMouseMove={handleStagePointerMove}
-          onMouseLeave={() => setShowOverlayControls(false)}
+          onMouseLeave={() => {
+            if (overlayPinned) {
+              return;
+            }
+            setShowOverlayControls(false);
+          }}
         >
           <StoryPlayerPanel
             playerState={playerState}
@@ -81,7 +106,7 @@ export default function App() {
           />
           <div
             className={`media-overlay absolute inset-x-0 z-40 transition-all duration-300 ${
-              showOverlayControls
+              showOverlayControls || overlayPinned
                 ? 'visible pointer-events-auto translate-y-0 opacity-100'
                 : 'invisible pointer-events-none translate-y-full opacity-0'
             }`}
@@ -96,8 +121,10 @@ export default function App() {
                 playerState={playerState}
                 togglePlayback={togglePlayback}
                 rewind={rewind}
-                onUploadPhotos={() => photoInputRef.current?.click()}
-                onUploadAudio={() => audioInputRef.current?.click()}
+                onUploadPhotos={() => openPicker(photoInputRef)}
+                onUploadAudio={() => openPicker(audioInputRef)}
+                isUploadingPhotos={isUploadingPhotos}
+                audioMeta={audioMeta}
               />
               <PhotoManagerPanel
                 uploads={uploads}

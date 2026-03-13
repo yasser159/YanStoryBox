@@ -28,14 +28,8 @@ export function PhotoManagerPanel({
 
   return (
     <article className={`${embedded ? 'rounded-[1.5rem] border border-white/10 bg-white/5 p-4 shadow-xl shadow-black/20 backdrop-blur sm:p-5' : 'rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/20 backdrop-blur'} ${className}`} style={style}>
-      <div className="flex justify-center">
-        <div className="rounded-full border border-white/10 bg-stone-950/50 px-4 py-2 text-sm text-stone-300">
-          Track: <span className="font-semibold text-stone-100">{audioMeta.fileName}</span>
-        </div>
-      </div>
-
       {persistenceError ? (
-        <div className="mt-4 rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">
+        <div className="rounded-2xl border border-rose-400/30 bg-rose-400/10 p-4 text-sm text-rose-100">
           {persistenceError}
         </div>
       ) : null}
@@ -46,7 +40,7 @@ export function PhotoManagerPanel({
         </div>
       ) : null}
 
-      <div className="mt-6">
+      <div className={persistenceError || audioError ? 'mt-4' : ''}>
         {!uploads.length ? (
           <EmptyState isHydrating={isHydrating} />
         ) : (

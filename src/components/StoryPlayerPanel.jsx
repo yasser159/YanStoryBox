@@ -29,12 +29,29 @@ function RewindIcon() {
   );
 }
 
+function SpinnerIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="h-4 w-4 animate-spin">
+      <circle cx="12" cy="12" r="9" className="stroke-current/25" strokeWidth="3" fill="none" />
+      <path
+        d="M21 12a9 9 0 0 0-9-9"
+        className="stroke-current"
+        strokeWidth="3"
+        strokeLinecap="round"
+        fill="none"
+      />
+    </svg>
+  );
+}
+
 export function PlayerControlsBar({
   playerState,
   togglePlayback,
   rewind,
   onUploadPhotos,
   onUploadAudio,
+  isUploadingPhotos = false,
+  audioMeta,
 }) {
   const progress = playerState.duration > 0
     ? Math.min(100, (playerState.currentTime / playerState.duration) * 100)
@@ -42,9 +59,14 @@ export function PlayerControlsBar({
 
   return (
     <div className="w-full rounded-[1.5rem] border border-white/10 bg-black/45 p-3 backdrop-blur sm:p-4">
-      <div className="mb-2 flex justify-between text-sm text-stone-200">
-        <span>{formatTime(playerState.currentTime)}</span>
-        <span>{formatTime(playerState.duration || 120)}</span>
+      <div className="mb-2 flex items-center justify-between gap-3 text-sm text-stone-200">
+        <div className="max-w-[45vw] truncate rounded-full border border-white/10 bg-stone-950/50 px-3 py-1 text-xs font-medium text-stone-200 sm:max-w-[28rem]">
+          Track: <span className="font-semibold text-stone-100">{audioMeta?.fileName || 'demo-story.wav'}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span>{formatTime(playerState.currentTime)}</span>
+          <span>{formatTime(playerState.duration || 120)}</span>
+        </div>
       </div>
       <div className="h-2.5 overflow-hidden rounded-full bg-white/15">
         <div
@@ -72,9 +94,11 @@ export function PlayerControlsBar({
         <button
           type="button"
           onClick={onUploadPhotos}
-          className="inline-flex items-center justify-center rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
+          disabled={isUploadingPhotos}
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-orange-300 disabled:cursor-wait disabled:bg-orange-300/80 disabled:text-stone-900"
         >
-          Upload Photos
+          {isUploadingPhotos ? <SpinnerIcon /> : null}
+          {isUploadingPhotos ? 'Uploading…' : 'Upload Photos'}
         </button>
         <button
           type="button"
@@ -84,6 +108,11 @@ export function PlayerControlsBar({
           Upload Audio
         </button>
       </div>
+      {isUploadingPhotos ? (
+        <div className="mt-3 text-center text-xs font-medium uppercase tracking-[0.2em] text-orange-100/85">
+          Loading images to Firebase storage. Wait a beat.
+        </div>
+      ) : null}
     </div>
   );
 }

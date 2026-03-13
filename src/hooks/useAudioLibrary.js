@@ -2,28 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { storyAudio } from '../data/storyMedia';
 import { logEvent } from '../lib/logger';
 import {
-  clearAudio,
-  loadAudio,
-  revokeAudioUrl,
+  ensurePresentationDocument,
+  loadPresentation,
+  removeAudioAsset,
   saveAudio,
-} from '../lib/audioLibraryStorage';
-
-function deriveAudioTitle(fileName) {
-  return fileName.replace(/\.[^.]+$/, '') || 'Uploaded audio';
-}
-
-function createUploadedAudio(file) {
-  return {
-    id: 'presentation-audio',
-    title: deriveAudioTitle(file.name),
-    fileName: file.name,
-    mimeType: file.type,
-    createdAt: new Date().toISOString(),
-    kind: 'upload',
-    blob: file,
-    src: URL.createObjectURL(file),
-  };
-}
+  uploadAudio,
+} from '../lib/presentationRepository';
 
 export function useAudioLibrary() {
   const [uploadedAudio, setUploadedAudio] = useState(null);
@@ -35,18 +19,16 @@ export function useAudioLibrary() {
     let cancelled = false;
     logEvent('info', 'presentation_audio.persist_hydrate_started');
 
-    loadAudio()
-      .then((audio) => {
-        if (cancelled) {
-          revokeAudioUrl(audio);
-          return;
-        }
+    ensurePresentationDocument()
+      .then(() => loadPresentation())
+      .then((presentation) => {
+        if (cancelled) return;
 
-        setUploadedAudio(audio);
+        setUploadedAudio(presentation.audio);
         setAudioError('');
         logEvent('info', 'presentation_audio.persist_hydrate_succeeded', {
-          hasUpload: Boolean(audio),
-          fileName: audio?.fileName || '',
+          hasUpload: Boolean(presentation.audio),
+          fileName: presentation.audio?.fileName || '',
         });
       })
       .catch((error) => {
@@ -71,10 +53,6 @@ export function useAudioLibrary() {
     audioRef.current = uploadedAudio;
   }, [uploadedAudio]);
 
-  useEffect(() => () => {
-    revokeAudioUrl(audioRef.current);
-  }, []);
-
   const uploadAudioFile = async (file) => {
     if (!file) return;
 
@@ -93,23 +71,20 @@ export function useAudioLibrary() {
       return;
     }
 
-    const nextAudio = createUploadedAudio(file);
     const previousAudio = uploadedAudio;
 
     try {
+      const nextAudio = await uploadAudio(file);
       setUploadedAudio(nextAudio);
       await saveAudio(nextAudio);
       setAudioError('');
-      if (previousAudio) {
-        revokeAudioUrl(previousAudio);
-      }
+      if (previousAudio) await removeAudioAsset(previousAudio);
       logEvent('info', 'presentation_audio.upload_succeeded', {
         fileName: file.name,
         mimeType: file.type,
       });
     } catch (error) {
       setUploadedAudio(previousAudio);
-      revokeAudioUrl(nextAudio);
       const message = error instanceof Error ? error.message : 'Failed to store uploaded audio.';
       setAudioError(message);
       logEvent('error', 'presentation_audio.upload_failed', { fileName: file.name, message });
@@ -121,9 +96,11 @@ export function useAudioLibrary() {
     setUploadedAudio(null);
 
     try {
-      await clearAudio();
+      if (previousAudio) {
+        await removeAudioAsset(previousAudio);
+      }
+      await saveAudio(null);
       setAudioError('');
-      revokeAudioUrl(previousAudio);
       logEvent('info', 'presentation_audio.reset_to_demo', {
         hadUpload: Boolean(previousAudio),
       });

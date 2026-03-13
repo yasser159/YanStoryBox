@@ -2,29 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { storySlides } from '../data/storyMedia';
 import { logEvent } from '../lib/logger';
 import {
-  clearSlides,
-  loadSlides,
-  revokeSlideUrls,
+  ensurePresentationDocument,
+  loadPresentation,
+  removeSlideAsset,
   saveSlides,
+  uploadSlides,
+} from '../lib/presentationRepository';
+import {
+  loadSlides as loadLocalSlides,
+  revokeSlideUrls,
+  saveSlides as saveLocalSlides,
 } from '../lib/slideLibraryStorage';
-
-function deriveTitle(fileName) {
-  return fileName.replace(/\.[^.]+$/, '') || 'Uploaded photo';
-}
-
-function createUploadSlide(file) {
-  return {
-    id: `upload-${crypto.randomUUID()}`,
-    title: deriveTitle(file.name),
-    caption: 'Uploaded photo',
-    src: URL.createObjectURL(file),
-    kind: 'upload',
-    fileName: file.name,
-    mimeType: file.type,
-    createdAt: new Date().toISOString(),
-    blob: file,
-  };
-}
 
 function reorderByIds(items, fromId, toId) {
   const fromIndex = items.findIndex((item) => item.id === fromId);
@@ -42,35 +30,79 @@ function reorderByIds(items, fromId, toId) {
 export function useSlideLibrary() {
   const [uploadedSlides, setUploadedSlides] = useState([]);
   const [isHydrating, setIsHydrating] = useState(true);
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
   const [persistenceError, setPersistenceError] = useState('');
+  const [libraryMode, setLibraryMode] = useState('remote');
   const uploadsRef = useRef([]);
+
+  const hydrateLocalSlides = async () => {
+    const localSlides = await loadLocalSlides();
+    if (localSlides.length) {
+      setLibraryMode('local');
+      logEvent('warn', 'photos.persist_hydrate_local_fallback', { count: localSlides.length });
+    }
+    return localSlides;
+  };
+
+  const createLocalSlides = (files) => files.map((file) => ({
+    id: `local-upload-${crypto.randomUUID()}`,
+    title: file.name.replace(/\.[^.]+$/, '') || 'Uploaded photo',
+    caption: 'Uploaded photo',
+    src: URL.createObjectURL(file),
+    kind: 'upload',
+    fileName: file.name,
+    mimeType: file.type,
+    createdAt: new Date().toISOString(),
+    blob: file,
+    storageMode: 'local',
+  }));
 
   useEffect(() => {
     let cancelled = false;
     logEvent('info', 'photos.persist_hydrate_started');
 
-    loadSlides()
-      .then((slides) => {
+    ensurePresentationDocument()
+      .then(() => loadPresentation())
+      .then(async (presentation) => {
         if (cancelled) {
-          revokeSlideUrls(slides);
           return;
         }
 
-        setUploadedSlides(slides);
-        setPersistenceError('');
-        logEvent('info', 'photos.persist_hydrate_succeeded', { count: slides.length });
+        const restoredSlides = presentation.slides.length
+          ? presentation.slides
+          : await hydrateLocalSlides();
+
+        const nextMode = presentation.slides.length ? 'remote' : (restoredSlides.length ? 'local' : 'remote');
+        setLibraryMode(nextMode);
+        setUploadedSlides(restoredSlides);
+        setPersistenceError(nextMode === 'local' ? 'Cloud photo storage is unavailable. Using browser-local uploads.' : '');
+        logEvent('info', 'photos.persist_hydrate_succeeded', {
+          count: restoredSlides.length,
+          storageMode: presentation.slides.length ? 'remote' : (restoredSlides.length ? 'local' : 'remote'),
+        });
       })
-      .catch((error) => {
+      .catch(async (error) => {
         if (cancelled) return;
-        const message = error instanceof Error ? error.message : 'Failed to restore uploaded slides.';
-        setUploadedSlides([]);
-        setPersistenceError(message);
-        logEvent('error', 'photos.persist_hydrate_failed', { message });
+        try {
+          const restoredSlides = await hydrateLocalSlides();
+          setUploadedSlides(restoredSlides);
+          setPersistenceError(restoredSlides.length ? 'Cloud photo storage is unavailable. Using browser-local uploads.' : '');
+          logEvent('warn', 'photos.persist_hydrate_remote_failed_local_recovered', {
+            message: error instanceof Error ? error.message : 'Unknown remote hydrate failure',
+            recoveredCount: restoredSlides.length,
+          });
+        } catch (localError) {
+          const message = error instanceof Error ? error.message : 'Failed to restore uploaded slides.';
+          setUploadedSlides([]);
+          setPersistenceError(message);
+          logEvent('error', 'photos.persist_hydrate_failed', {
+            message,
+            localMessage: localError instanceof Error ? localError.message : 'Unknown local hydrate failure',
+          });
+        }
       })
       .finally(() => {
-        if (!cancelled) {
-          setIsHydrating(false);
-        }
+        if (!cancelled) setIsHydrating(false);
       });
 
     return () => {
@@ -86,18 +118,13 @@ export function useSlideLibrary() {
     revokeSlideUrls(uploadsRef.current);
   }, []);
 
-  const persistSlides = async (slides) => {
-    await saveSlides(slides);
-    setPersistenceError('');
-  };
-
   const uploadFiles = async (fileList) => {
     const files = Array.from(fileList || []);
     if (!files.length) return;
 
+    setIsUploadingPhotos(true);
     logEvent('info', 'photos.upload_started', { fileCount: files.length });
 
-    const accepted = [];
     for (const file of files) {
       if (!file.type.startsWith('image/')) {
         logEvent('warn', 'photos.upload_failed', {
@@ -106,33 +133,93 @@ export function useSlideLibrary() {
         });
         continue;
       }
-      accepted.push(createUploadSlide(file));
     }
 
-    if (!accepted.length) {
+    const imageFiles = files.filter((file) => file.type.startsWith('image/'));
+
+    if (!imageFiles.length) {
       setPersistenceError('Only image files are supported.');
+      setIsUploadingPhotos(false);
       return;
     }
 
     const previousSlides = uploadedSlides;
-    const nextSlides = [...uploadedSlides, ...accepted];
+    const canUseLocalFallback = previousSlides.every((slide) => slide.blob instanceof Blob);
 
     try {
+      if (libraryMode === 'local') {
+        const acceptedSlides = createLocalSlides(imageFiles);
+        const nextSlides = [...previousSlides, ...acceptedSlides];
+        setUploadedSlides(nextSlides);
+
+        try {
+          await saveLocalSlides(nextSlides);
+          setPersistenceError('Cloud photo storage is unavailable. Saved in this browser only.');
+          logEvent('warn', 'photos.upload_local_only', {
+            fileCount: acceptedSlides.length,
+            slideIds: acceptedSlides.map((slide) => slide.id),
+          });
+        } catch (error) {
+          setUploadedSlides(previousSlides);
+          const message = error instanceof Error ? error.message : 'Failed to store uploaded photos locally.';
+          setPersistenceError(message);
+          logEvent('error', 'photos.upload_failed', {
+            fileCount: imageFiles.length,
+            message,
+            storageMode: 'local',
+          });
+        }
+        return;
+      }
+
+      const acceptedSlides = await uploadSlides(imageFiles);
+      const nextSlides = [...uploadedSlides, ...acceptedSlides];
       setUploadedSlides(nextSlides);
-      await persistSlides(nextSlides);
+      await saveSlides(nextSlides);
+      setPersistenceError('');
       logEvent('info', 'photos.upload_succeeded', {
-        fileCount: accepted.length,
-        slideIds: accepted.map((slide) => slide.id),
+        fileCount: acceptedSlides.length,
+        slideIds: acceptedSlides.map((slide) => slide.id),
       });
     } catch (error) {
-      revokeSlideUrls(accepted);
-      setUploadedSlides(previousSlides);
       const message = error instanceof Error ? error.message : 'Failed to store uploaded photos.';
-      setPersistenceError(message);
-      logEvent('error', 'photos.upload_failed', {
-        fileCount: accepted.length,
-        message,
-      });
+      if (!canUseLocalFallback) {
+        setUploadedSlides(previousSlides);
+        setPersistenceError(message);
+        logEvent('error', 'photos.upload_failed', {
+          fileCount: imageFiles.length,
+          message,
+          storageMode: 'remote',
+        });
+        return;
+      }
+
+      const acceptedSlides = createLocalSlides(imageFiles);
+      const nextSlides = [...previousSlides, ...acceptedSlides];
+      setUploadedSlides(nextSlides);
+
+      try {
+        await saveLocalSlides(nextSlides);
+        setLibraryMode('local');
+        setPersistenceError('Cloud photo storage is unavailable. Saved in this browser only.');
+        logEvent('warn', 'photos.upload_fell_back_to_local', {
+          fileCount: acceptedSlides.length,
+          slideIds: acceptedSlides.map((slide) => slide.id),
+          remoteMessage: message,
+        });
+      } catch (localError) {
+        setUploadedSlides(previousSlides);
+        const localMessage = localError instanceof Error ? localError.message : 'Failed to store uploaded photos locally.';
+        setPersistenceError(localMessage);
+        logEvent('error', 'photos.upload_failed', {
+          fileCount: imageFiles.length,
+          message,
+          localMessage,
+          storageMode: 'remote_then_local',
+        });
+      }
+    } finally {
+      setIsUploadingPhotos(false);
     }
   };
 
@@ -146,11 +233,17 @@ export function useSlideLibrary() {
     setUploadedSlides(nextSlides);
 
     try {
-      await persistSlides(nextSlides);
+      if (libraryMode === 'local') {
+        await saveLocalSlides(nextSlides);
+      } else {
+        await saveSlides(nextSlides);
+      }
+      setPersistenceError('');
       logEvent('info', 'photos.reordered', {
         fromId,
         toId,
         orderedIds: nextSlides.map((slide) => slide.id),
+        storageMode: libraryMode,
       });
     } catch (error) {
       setUploadedSlides(previousSlides);
@@ -169,9 +262,23 @@ export function useSlideLibrary() {
     setUploadedSlides(nextSlides);
 
     try {
-      await persistSlides(nextSlides);
-      revokeSlideUrls([target]);
-      logEvent('info', 'photos.removed', { slideId: id, remainingCount: nextSlides.length });
+      if (libraryMode === 'local') {
+        if (typeof target.src === 'string' && target.src.startsWith('blob:')) {
+          revokeSlideUrls([target]);
+        }
+        await saveLocalSlides(nextSlides);
+      } else {
+        await Promise.all([
+          saveSlides(nextSlides),
+          removeSlideAsset(target),
+        ]);
+      }
+      setPersistenceError('');
+      logEvent('info', 'photos.removed', {
+        slideId: id,
+        remainingCount: nextSlides.length,
+        storageMode: libraryMode,
+      });
     } catch (error) {
       setUploadedSlides(previousSlides);
       const message = error instanceof Error ? error.message : 'Failed to remove photo.';
@@ -185,8 +292,13 @@ export function useSlideLibrary() {
     setUploadedSlides([]);
 
     try {
-      await clearSlides();
-      revokeSlideUrls(previousSlides);
+      if (libraryMode === 'local') {
+        revokeSlideUrls(previousSlides);
+        await saveLocalSlides([]);
+      } else {
+        await Promise.all(previousSlides.map((slide) => removeSlideAsset(slide)));
+        await saveSlides([]);
+      }
       setPersistenceError('');
       logEvent('info', 'photos.reset_to_demo', { clearedCount: previousSlides.length });
     } catch (error) {
@@ -207,6 +319,7 @@ export function useSlideLibrary() {
     removeSlide,
     resetUploads,
     isHydrating,
+    isUploadingPhotos,
     persistenceError,
   };
 }
