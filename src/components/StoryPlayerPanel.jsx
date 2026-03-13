@@ -29,65 +29,74 @@ function RewindIcon() {
   );
 }
 
-export function StoryPlayerPanel({
+export function PlayerControlsBar({
   playerState,
-  timeline,
   togglePlayback,
   rewind,
 }) {
-  const activeSlide = timeline[playerState.activeSlideIndex] ?? timeline[0];
   const progress = playerState.duration > 0
     ? Math.min(100, (playerState.currentTime / playerState.duration) * 100)
     : 0;
 
   return (
-    <section>
-      <article className="group relative min-h-screen overflow-hidden border-0 bg-stone-900 shadow-2xl shadow-black/40">
+    <div className="w-full rounded-[1.5rem] border border-white/10 bg-black/45 p-3 backdrop-blur sm:p-4">
+      <div className="mb-2 flex justify-between text-sm text-stone-200">
+        <span>{formatTime(playerState.currentTime)}</span>
+        <span>{formatTime(playerState.duration || 120)}</span>
+      </div>
+      <div className="h-2.5 overflow-hidden rounded-full bg-white/15">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-orange-400 via-amber-300 to-yellow-200 transition-all"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <div className="mt-4 flex justify-center gap-3">
+        <button
+          type="button"
+          onClick={rewind}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-stone-100 transition hover:bg-white/20"
+          aria-label="Rewind"
+        >
+          <RewindIcon />
+        </button>
+        <button
+          type="button"
+          onClick={togglePlayback}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-orange-400 text-stone-950 transition hover:bg-orange-300"
+          aria-label={playerState.isPlaying ? 'Pause' : 'Play'}
+        >
+          {playerState.isPlaying ? <PauseIcon /> : <PlayIcon />}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function StoryPlayerPanel({
+  timeline,
+  playerState,
+  className = '',
+}) {
+  const activeSlide = timeline[playerState.activeSlideIndex] ?? timeline[0] ?? {};
+
+  return (
+    <section className="h-full min-h-[100svh]">
+      <article className={`scene-shell relative h-full min-h-[100svh] overflow-hidden border-0 bg-stone-900 shadow-2xl shadow-black/40 ${className}`}>
         <img
           key={activeSlide?.id}
           src={activeSlide?.src}
-          alt={activeSlide?.title}
-          className="h-screen w-full object-cover object-center transition duration-700 ease-out"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 h-full w-full scale-105 object-cover object-center opacity-55 blur-xl transition duration-700 ease-out"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-stone-950 via-stone-950/25 to-transparent" />
-        <div className="absolute inset-x-0 bottom-[19rem] z-40 flex translate-y-4 px-4 opacity-0 transition duration-300 group-hover:translate-y-0 group-hover:opacity-100 sm:bottom-[20rem] sm:px-6">
-          <div className="w-full rounded-[1.5rem] border border-white/10 bg-black/45 p-4 backdrop-blur">
-            <div className="mb-2 flex justify-between text-sm text-stone-200">
-              <span>{formatTime(playerState.currentTime)}</span>
-              <span>{formatTime(playerState.duration || 120)}</span>
-            </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-white/15">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-orange-400 via-amber-300 to-yellow-200 transition-all"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className="mt-4 flex justify-center gap-3">
-              <button
-                type="button"
-                onClick={rewind}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/15 bg-white/10 text-stone-100 transition hover:bg-white/20"
-                aria-label="Rewind"
-              >
-                <RewindIcon />
-              </button>
-              <button
-                type="button"
-                onClick={togglePlayback}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-orange-400 text-stone-950 transition hover:bg-orange-300"
-                aria-label={playerState.isPlaying ? 'Pause' : 'Play'}
-              >
-                {playerState.isPlaying ? <PauseIcon /> : <PlayIcon />}
-              </button>
-            </div>
-          </div>
-        </div>
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 p-4 sm:p-6 md:p-8">
-          <p className="text-xs uppercase tracking-[0.35em] text-orange-300/80">
-            Slide {playerState.activeSlideIndex + 1} / {timeline.length}
-          </p>
-          <h2 className="mt-2 max-w-3xl text-3xl font-semibold text-stone-50 sm:text-4xl md:text-5xl">{activeSlide?.title}</h2>
-          <p className="mt-2 max-w-2xl text-sm text-stone-200/90 sm:text-base">{activeSlide?.caption}</p>
+        <div className="absolute inset-0 bg-gradient-to-t from-stone-950/90 via-stone-950/35 to-stone-950/10" />
+        <div className="absolute inset-0 z-10 flex items-center justify-center p-0">
+          <img
+            key={`${activeSlide?.id}-detail`}
+            src={activeSlide?.src}
+            alt={activeSlide?.title}
+            className="block h-full w-full object-contain object-center transition duration-700 ease-out"
+          />
         </div>
       </article>
     </section>
