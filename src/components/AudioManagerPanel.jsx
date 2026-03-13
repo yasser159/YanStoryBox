@@ -19,21 +19,7 @@ export function AudioManagerPanel({
 
   return (
     <article className="rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/20 backdrop-blur">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div>
-          <p className="text-xs uppercase tracking-[0.35em] text-orange-300/80">Audio Manager</p>
-          <h2 className="mt-2 text-3xl font-semibold text-stone-50">Upload the soundtrack</h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-300">
-            Same hustle as the photos: drop in your own audio and the presentation rides with that track instead of the demo joint.
-          </p>
-        </div>
-
-        <div className="rounded-full border border-white/10 bg-stone-950/50 px-4 py-2 text-sm text-stone-300">
-          Source: <span className="font-semibold capitalize text-stone-100">{audioSourceMode}</span>
-        </div>
-      </div>
-
-      <div className="mt-6 flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-3">
         <button
           type="button"
           onClick={() => fileInputRef.current?.click()}
@@ -71,8 +57,13 @@ export function AudioManagerPanel({
             <h3 className="mt-1 text-xl font-semibold text-stone-50">{audioMeta.title}</h3>
             <p className="mt-1 text-sm text-stone-400">{audioMeta.fileName}</p>
           </div>
-          <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-stone-300">
-            {audioMeta.mimeType || 'audio/*'}
+          <div className="flex flex-wrap gap-2">
+            <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-stone-300">
+              {audioMeta.mimeType || 'audio/*'}
+            </div>
+            <div className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-stone-300">
+              {audioSourceMode}
+            </div>
           </div>
         </div>
       </div>
