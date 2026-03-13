@@ -1,0 +1,8 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#292524"/>
+  <rect x="120" y="110" width="360" height="500" rx="26" fill="#FED7AA" fill-opacity="0.85"/>
+  <rect x="540" y="180" width="320" height="430" rx="26" fill="#F59E0B" fill-opacity="0.55"/>
+  <rect x="920" y="120" width="420" height="550" rx="26" fill="#FFFBEB" fill-opacity="0.7"/>
+  <text x="150" y="740" fill="#FAFAF9" font-family="Trebuchet MS, sans-serif" font-size="76" font-weight="700">Memory Lane</text>
+  <text x="150" y="815" fill="#D6D3D1" font-family="Trebuchet MS, sans-serif" font-size="34">Like flipping through old prints while the beat keeps rolling.</text>
+</svg>

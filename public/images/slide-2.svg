@@ -1,0 +1,7 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#172554"/>
+  <path d="M0 660C250 480 470 760 740 610C1000 470 1200 290 1600 470V900H0V660Z" fill="#38BDF8" fill-opacity="0.38"/>
+  <path d="M0 750C250 570 540 820 840 690C1120 560 1300 430 1600 560V900H0V750Z" fill="#F97316" fill-opacity="0.52"/>
+  <text x="140" y="220" fill="#E0F2FE" font-family="Trebuchet MS, sans-serif" font-size="74" font-weight="700">Street Pulse</text>
+  <text x="140" y="300" fill="#BAE6FD" font-family="Trebuchet MS, sans-serif" font-size="34">The vibe gets louder and the frames start dancing.</text>
+</svg>

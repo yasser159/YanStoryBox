@@ -1,0 +1,8 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#431407"/>
+  <circle cx="1200" cy="210" r="180" fill="#FDBA74" fill-opacity="0.9"/>
+  <path d="M0 630C240 520 430 690 710 630C960 580 1180 390 1600 470V900H0V630Z" fill="#7C2D12"/>
+  <path d="M0 720C230 620 420 790 700 720C930 670 1200 540 1600 610V900H0V720Z" fill="#EA580C"/>
+  <text x="120" y="190" fill="#FFEDD5" font-family="Trebuchet MS, sans-serif" font-size="76" font-weight="700">Golden Hour</text>
+  <text x="120" y="270" fill="#FED7AA" font-family="Trebuchet MS, sans-serif" font-size="34">Everything slows down and looks expensive for a second.</text>
+</svg>

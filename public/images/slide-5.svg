@@ -1,0 +1,13 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1600" height="900" fill="#111827"/>
+  <rect x="0" y="0" width="1600" height="900" fill="url(#paint0_linear_0_1)"/>
+  <path d="M180 710L430 350L690 590L930 260L1260 620L1460 390" stroke="#FDE68A" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="120" y="190" fill="#F9FAFB" font-family="Trebuchet MS, sans-serif" font-size="76" font-weight="700">Final Fade</text>
+  <text x="120" y="270" fill="#E5E7EB" font-family="Trebuchet MS, sans-serif" font-size="34">Last frame hits. Curtains close. No messy landing.</text>
+  <defs>
+    <linearGradient id="paint0_linear_0_1" x1="1600" y1="900" x2="0" y2="0" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1D4ED8"/>
+      <stop offset="1" stop-color="#020617"/>
+    </linearGradient>
+  </defs>
+</svg>
