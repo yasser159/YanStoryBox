@@ -55,7 +55,16 @@ export function useSlideLibrary() {
     createdAt: new Date().toISOString(),
     blob: file,
     storageMode: 'local',
+    cueTime: null,
   }));
+
+  const persistUploadedSlides = async (slides) => {
+    if (libraryMode === 'local') {
+      await saveLocalSlides(slides);
+      return;
+    }
+    await saveSlides(slides);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -153,7 +162,7 @@ export function useSlideLibrary() {
         setUploadedSlides(nextSlides);
 
         try {
-          await saveLocalSlides(nextSlides);
+          await persistUploadedSlides(nextSlides);
           setPersistenceError('Cloud photo storage is unavailable. Saved in this browser only.');
           logEvent('warn', 'photos.upload_local_only', {
             fileCount: acceptedSlides.length,
@@ -175,7 +184,7 @@ export function useSlideLibrary() {
       const acceptedSlides = await uploadSlides(imageFiles);
       const nextSlides = [...uploadedSlides, ...acceptedSlides];
       setUploadedSlides(nextSlides);
-      await saveSlides(nextSlides);
+      await persistUploadedSlides(nextSlides);
       setPersistenceError('');
       logEvent('info', 'photos.upload_succeeded', {
         fileCount: acceptedSlides.length,
@@ -233,11 +242,7 @@ export function useSlideLibrary() {
     setUploadedSlides(nextSlides);
 
     try {
-      if (libraryMode === 'local') {
-        await saveLocalSlides(nextSlides);
-      } else {
-        await saveSlides(nextSlides);
-      }
+      await persistUploadedSlides(nextSlides);
       setPersistenceError('');
       logEvent('info', 'photos.reordered', {
         fromId,
@@ -250,6 +255,45 @@ export function useSlideLibrary() {
       const message = error instanceof Error ? error.message : 'Failed to save new order.';
       setPersistenceError(message);
       logEvent('error', 'photos.reordered_failed', { fromId, toId, message });
+    }
+  };
+
+  const setSlideCueTime = async (id, cueTime, duration) => {
+    const target = uploadedSlides.find((slide) => slide.id === id);
+    if (!target) return;
+
+    const clampedCueTime = Number.isFinite(duration) && duration > 0
+      ? Math.min(Math.max(0, cueTime), duration)
+      : Math.max(0, cueTime);
+
+    const previousSlides = uploadedSlides;
+    const nextSlides = uploadedSlides.map((slide) => (
+      slide.id === id
+        ? { ...slide, cueTime: clampedCueTime }
+        : slide
+    ));
+
+    setUploadedSlides(nextSlides);
+
+    try {
+      await persistUploadedSlides(nextSlides);
+      setPersistenceError('');
+      logEvent('info', 'photos.cue_updated', {
+        slideId: id,
+        cueTime: clampedCueTime,
+        duration,
+        storageMode: libraryMode,
+      });
+    } catch (error) {
+      setUploadedSlides(previousSlides);
+      const message = error instanceof Error ? error.message : 'Failed to save slide cue.';
+      setPersistenceError(message);
+      logEvent('error', 'photos.cue_update_failed', {
+        slideId: id,
+        cueTime: clampedCueTime,
+        message,
+        storageMode: libraryMode,
+      });
     }
   };
 
@@ -266,7 +310,7 @@ export function useSlideLibrary() {
         if (typeof target.src === 'string' && target.src.startsWith('blob:')) {
           revokeSlideUrls([target]);
         }
-        await saveLocalSlides(nextSlides);
+        await persistUploadedSlides(nextSlides);
       } else {
         await Promise.all([
           saveSlides(nextSlides),
@@ -294,7 +338,7 @@ export function useSlideLibrary() {
     try {
       if (libraryMode === 'local') {
         revokeSlideUrls(previousSlides);
-        await saveLocalSlides([]);
+        await persistUploadedSlides([]);
       } else {
         await Promise.all(previousSlides.map((slide) => removeSlideAsset(slide)));
         await saveSlides([]);
@@ -316,6 +360,7 @@ export function useSlideLibrary() {
     sourceMode: uploadedSlides.length > 0 ? 'upload' : 'demo',
     uploadFiles,
     reorderSlides,
+    setSlideCueTime,
     removeSlide,
     resetUploads,
     isHydrating,

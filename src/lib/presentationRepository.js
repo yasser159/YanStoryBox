@@ -34,6 +34,7 @@ function mapSlideRecord(record) {
     mimeType: record.mimeType,
     createdAt: record.createdAt,
     storagePath: record.storagePath,
+    cueTime: Number.isFinite(record.cueTime) ? record.cueTime : null,
   };
 }
 
@@ -91,6 +92,7 @@ export async function uploadSlides(files) {
       mimeType: file.type,
       createdAt,
       storagePath: asset.storagePath,
+      cueTime: null,
     });
   }
 

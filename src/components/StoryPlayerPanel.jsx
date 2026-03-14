@@ -50,8 +50,11 @@ export function PlayerControlsBar({
   playerState,
   togglePlayback,
   rewind,
-  onUploadPhotos,
-  onUploadAudio,
+  rewindTenSeconds,
+  forwardTenSeconds,
+  onUploadIntent,
+  onPhotoInputChange,
+  onAudioInputChange,
   isUploadingPhotos = false,
   audioMeta,
 }) {
@@ -92,6 +95,14 @@ export function PlayerControlsBar({
         </button>
         <button
           type="button"
+          onClick={rewindTenSeconds}
+          className="inline-flex h-10 min-w-[4.25rem] items-center justify-center rounded-full border border-white/15 bg-white/10 px-3 text-sm font-semibold text-stone-100 transition hover:bg-white/20"
+          aria-label="Rewind 10 seconds"
+        >
+          -10s
+        </button>
+        <button
+          type="button"
           onClick={togglePlayback}
           className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-orange-400 text-stone-950 transition hover:bg-orange-300"
           aria-label={playerState.isPlaying ? 'Pause' : 'Play'}
@@ -100,20 +111,45 @@ export function PlayerControlsBar({
         </button>
         <button
           type="button"
-          onClick={onUploadPhotos}
-          disabled={isUploadingPhotos}
-          className="inline-flex items-center justify-center gap-2 rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-orange-300 disabled:cursor-wait disabled:bg-orange-300/80 disabled:text-stone-900"
+          onClick={forwardTenSeconds}
+          className="inline-flex h-10 min-w-[4.25rem] items-center justify-center rounded-full border border-white/15 bg-white/10 px-3 text-sm font-semibold text-stone-100 transition hover:bg-white/20"
+          aria-label="Forward 10 seconds"
         >
+          +10s
+        </button>
+        <label
+          onPointerDown={isUploadingPhotos ? undefined : onUploadIntent}
+          className={`relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full px-4 py-2 text-sm font-semibold transition ${
+            isUploadingPhotos
+              ? 'cursor-wait bg-orange-300/80 text-stone-900'
+              : 'cursor-pointer bg-orange-400 text-stone-950 hover:bg-orange-300'
+          }`}
+        >
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            disabled={isUploadingPhotos}
+            onChange={onPhotoInputChange}
+            className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-wait"
+          />
           {isUploadingPhotos ? <SpinnerIcon /> : null}
-          {isUploadingPhotos ? 'Uploading…' : 'Upload Photos'}
-        </button>
-        <button
-          type="button"
-          onClick={onUploadAudio}
-          className="inline-flex items-center justify-center rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
+          <span className="pointer-events-none">
+            {isUploadingPhotos ? 'Uploading…' : 'Upload Photos'}
+          </span>
+        </label>
+        <label
+          onPointerDown={onUploadIntent}
+          className="relative inline-flex cursor-pointer items-center justify-center overflow-hidden rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
         >
-          Upload Audio
-        </button>
+          <input
+            type="file"
+            accept="audio/*"
+            onChange={onAudioInputChange}
+            className="absolute inset-0 cursor-pointer opacity-0"
+          />
+          <span className="pointer-events-none">Upload Audio</span>
+        </label>
       </div>
       <AnimatePresence initial={false}>
         {isUploadingPhotos ? (
