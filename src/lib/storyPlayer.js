@@ -145,6 +145,40 @@ export class StoryPlayer {
     });
   }
 
+  seekBy(deltaSeconds) {
+    const previousTime = this.audio.currentTime || 0;
+    const duration = this.audio.duration || this.state.duration || 0;
+    const nextTime = Math.min(
+      Math.max(0, previousTime + deltaSeconds),
+      duration > 0 ? duration : previousTime + deltaSeconds,
+    );
+    const activeSlideIndex = getSlideIndexForTime(this.timeline, nextTime);
+
+    logEvent('info', 'player.seek_requested', {
+      deltaSeconds,
+      previousTime,
+      nextTime,
+      duration,
+      activeSlideIndex,
+    });
+
+    this.audio.currentTime = nextTime;
+    this.setState({
+      currentTime: nextTime,
+      activeSlideIndex,
+      status: this.audio.paused ? 'ready' : this.state.status,
+      error: '',
+    });
+  }
+
+  rewindTenSeconds() {
+    this.seekBy(-10);
+  }
+
+  forwardTenSeconds() {
+    this.seekBy(10);
+  }
+
   togglePlayback() {
     if (this.audio.paused) {
       this.play();

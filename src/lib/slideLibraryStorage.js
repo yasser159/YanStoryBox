@@ -68,6 +68,7 @@ export async function loadSlides() {
           mimeType: record.mimeType,
           createdAt: record.createdAt,
           blob: record.blob,
+          cueTime: Number.isFinite(record.cueTime) ? record.cueTime : null,
         }));
       resolve(slides);
     };
@@ -97,6 +98,7 @@ export async function saveSlides(slides) {
           mimeType: slide.mimeType,
           createdAt: slide.createdAt,
           order,
+          cueTime: Number.isFinite(slide.cueTime) ? slide.cueTime : null,
           blob: slide.blob,
         });
 

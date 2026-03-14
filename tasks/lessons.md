@@ -5,3 +5,8 @@
 - In a fullscreen stage, never use bottom padding on the stage shell to "make room" for overlay UI. Keep the stage locked to viewport height and position controls/trays absolutely inside it, then verify `scrollHeight` does not exceed `innerHeight`.
 - When an upload button "works" but no thumbnail appears, verify the real upload pipeline with a browser-selected file and inspect console/network errors before touching the button UI. The click path can be innocent while Storage is the one smoking crack.
 - When the user says to use an animation library only for UI chrome, do not sneak it onto media transitions or thumbnail movement. Keep the actual content switching plain unless they explicitly ask for media animation.
+- For file pickers in hover-driven overlays, prefer native label-to-input wiring over `input.click()`. Programmatic picker triggers plus focus juggling is how you end up chasing ghosts.
+- Do not pair label-triggered upload buttons with `display:none` file inputs. Keep the input off-screen and transparent so the browser still considers it real enough to open the chooser.
+- Before claiming an upload-button fix, validate the exact user path in a fresh browser session: hover, click the visible control, choose a file, and confirm a new thumbnail appears.
+- For upload controls, the most reliable setup is to put the real file input inside the visible control. Hidden proxy pickers are like using a middleman who keeps dropping the bag.
+- Do not attach extra state-changing behavior to the file input `onClick` if you can avoid it. Let the visible wrapper handle UI state and keep the actual picker click clean.

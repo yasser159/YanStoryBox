@@ -9,8 +9,6 @@ import { useStoryPlayer } from './hooks/useStoryPlayer';
 export default function App() {
   const [showOverlayControls, setShowOverlayControls] = useState(false);
   const [overlayPinned, setOverlayPinned] = useState(false);
-  const photoInputRef = useRef(null);
-  const audioInputRef = useRef(null);
   const {
     audioSrc,
     uploadAudioFile,
@@ -22,12 +20,21 @@ export default function App() {
     uploads,
     uploadFiles,
     reorderSlides,
+    setSlideCueTime,
     removeSlide,
     isHydrating,
     isUploadingPhotos,
     persistenceError,
   } = useSlideLibrary();
-  const { audioRef, playerState, timeline, togglePlayback, rewind } = useStoryPlayer({
+  const {
+    audioRef,
+    playerState,
+    timeline,
+    togglePlayback,
+    rewind,
+    rewindTenSeconds,
+    forwardTenSeconds,
+  } = useStoryPlayer({
     audioSrc,
     slides,
   });
@@ -38,6 +45,19 @@ export default function App() {
     const relativeY = event.clientY - rect.top;
     const lowerTriggerStart = rect.height * 0.58;
     setShowOverlayControls(relativeY >= lowerTriggerStart);
+  };
+
+  const pinOverlayForPicker = () => {
+    setOverlayPinned(true);
+
+    const releasePin = () => {
+      window.removeEventListener('focus', releasePin);
+      window.setTimeout(() => {
+        setOverlayPinned(false);
+      }, 300);
+    };
+
+    window.addEventListener('focus', releasePin, { once: true });
   };
 
   const handlePhotoInputChange = async (event) => {
@@ -56,38 +76,9 @@ export default function App() {
     setOverlayPinned(false);
   };
 
-  const openPicker = (inputRef) => {
-    setOverlayPinned(true);
-
-    const releasePin = () => {
-      window.removeEventListener('focus', releasePin);
-      window.setTimeout(() => {
-        setOverlayPinned(false);
-      }, 300);
-    };
-
-    window.addEventListener('focus', releasePin, { once: true });
-    inputRef.current?.click();
-  };
-
   return (
     <main className="h-[100dvh] min-h-[100svh] w-full overflow-hidden">
       <audio ref={audioRef} />
-      <input
-        ref={photoInputRef}
-        type="file"
-        accept="image/*"
-        multiple
-        className="hidden"
-        onChange={handlePhotoInputChange}
-      />
-      <input
-        ref={audioInputRef}
-        type="file"
-        accept="audio/*"
-        className="hidden"
-        onChange={handleAudioInputChange}
-      />
 
       <div className="mx-auto h-full max-w-none">
         <section
@@ -127,8 +118,11 @@ export default function App() {
                 playerState={playerState}
                 togglePlayback={togglePlayback}
                 rewind={rewind}
-                onUploadPhotos={() => openPicker(photoInputRef)}
-                onUploadAudio={() => openPicker(audioInputRef)}
+                rewindTenSeconds={rewindTenSeconds}
+                forwardTenSeconds={forwardTenSeconds}
+                onUploadIntent={pinOverlayForPicker}
+                onPhotoInputChange={handlePhotoInputChange}
+                onAudioInputChange={handleAudioInputChange}
                 isUploadingPhotos={isUploadingPhotos}
                 audioMeta={audioMeta}
               />
@@ -137,11 +131,12 @@ export default function App() {
                 activeSlideId={activeSlide?.id}
                 isHydrating={isHydrating}
                 persistenceError={persistenceError}
-                uploadFiles={uploadFiles}
                 reorderSlides={reorderSlides}
+                setSlideCueTime={setSlideCueTime}
                 removeSlide={removeSlide}
-                audioMeta={audioMeta}
                 audioError={audioError}
+                trackDuration={playerState.duration}
+                currentTime={playerState.currentTime}
                 embedded
                 className="media-tray h-full min-h-0 overflow-auto"
               />
