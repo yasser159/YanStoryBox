@@ -134,17 +134,16 @@ export function useSlideLibrary() {
     setIsUploadingPhotos(true);
     logEvent('info', 'photos.upload_started', { fileCount: files.length });
 
-    for (const file of files) {
-      if (!file.type.startsWith('image/')) {
+    const imageFiles = files.filter((file) => {
+      const isImage = file.type.startsWith('image/');
+      if (!isImage) {
         logEvent('warn', 'photos.upload_failed', {
           fileName: file.name,
           reason: 'Unsupported file type',
         });
-        continue;
       }
-    }
-
-    const imageFiles = files.filter((file) => file.type.startsWith('image/'));
+      return isImage;
+    });
 
     if (!imageFiles.length) {
       setPersistenceError('Only image files are supported.');
@@ -297,6 +296,38 @@ export function useSlideLibrary() {
     }
   };
 
+  const clearSlideCueTime = async (id) => {
+    const target = uploadedSlides.find((slide) => slide.id === id);
+    if (!target || !Number.isFinite(target.cueTime)) return;
+
+    const previousSlides = uploadedSlides;
+    const nextSlides = uploadedSlides.map((slide) => (
+      slide.id === id
+        ? { ...slide, cueTime: null }
+        : slide
+    ));
+
+    setUploadedSlides(nextSlides);
+
+    try {
+      await persistUploadedSlides(nextSlides);
+      setPersistenceError('');
+      logEvent('info', 'photos.cue_cleared', {
+        slideId: id,
+        storageMode: libraryMode,
+      });
+    } catch (error) {
+      setUploadedSlides(previousSlides);
+      const message = error instanceof Error ? error.message : 'Failed to clear slide cue.';
+      setPersistenceError(message);
+      logEvent('error', 'photos.cue_clear_failed', {
+        slideId: id,
+        message,
+        storageMode: libraryMode,
+      });
+    }
+  };
+
   const removeSlide = async (id) => {
     const target = uploadedSlides.find((slide) => slide.id === id);
     if (!target) return;
@@ -361,6 +392,7 @@ export function useSlideLibrary() {
     uploadFiles,
     reorderSlides,
     setSlideCueTime,
+    clearSlideCueTime,
     removeSlide,
     resetUploads,
     isHydrating,

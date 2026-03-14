@@ -1,19 +1,4 @@
-import { useRef } from 'react';
-
-function openNativeFilePicker(input) {
-  if (!input) return;
-
-  try {
-    if (typeof input.showPicker === 'function') {
-      input.showPicker();
-      return;
-    }
-  } catch {
-    // Fall back to click() when showPicker is unavailable or blocked.
-  }
-
-  input.click();
-}
+import { logEvent } from '../lib/logger';
 
 export function UploadPickerButton({
   accept,
@@ -23,44 +8,45 @@ export function UploadPickerButton({
   className = '',
   inputTestId,
   buttonTestId,
+  logPrefix = 'upload_button',
   children,
 }) {
-  const inputRef = useRef(null);
-
-  const handleButtonClick = () => {
-    if (disabled) return;
-    openNativeFilePicker(inputRef.current);
-  };
-
   const handleInputChange = async (event) => {
     const files = event.target.files;
+    logEvent('info', `${logPrefix}.files_selected`, {
+      accept,
+      multiple,
+      fileCount: files?.length || 0,
+      buttonTestId,
+      inputTestId,
+    });
     await onFilesSelected?.(files);
     event.target.value = '';
   };
 
   return (
-    <div className="relative">
+    <label className={`relative inline-flex overflow-hidden ${className}`} data-testid={buttonTestId}>
       <input
-        ref={inputRef}
         type="file"
         accept={accept}
         multiple={multiple}
         disabled={disabled}
         onChange={handleInputChange}
-        className="pointer-events-none absolute h-px w-px overflow-hidden opacity-0"
-        tabIndex={-1}
-        aria-hidden="true"
+        onClick={() => {
+          logEvent('info', `${logPrefix}.picker_clicked`, {
+            accept,
+            multiple,
+            disabled,
+            buttonTestId,
+            inputTestId,
+          });
+        }}
+        className="absolute inset-0 z-10 cursor-pointer opacity-0 disabled:cursor-wait"
         data-testid={inputTestId}
       />
-      <button
-        type="button"
-        onClick={handleButtonClick}
-        disabled={disabled}
-        className={className}
-        data-testid={buttonTestId}
-      >
+      <span className="pointer-events-none inline-flex items-center justify-center gap-2">
         {children}
-      </button>
-    </div>
+      </span>
+    </label>
   );
 }

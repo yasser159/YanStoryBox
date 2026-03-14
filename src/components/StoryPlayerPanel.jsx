@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { UploadPickerButton } from './UploadPickerButton';
+import { usePresentationUiStore } from '../stores/usePresentationUiStore';
 
 function formatTime(totalSeconds) {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds || 0));
@@ -58,6 +59,8 @@ export function PlayerControlsBar({
   isUploadingPhotos = false,
   audioMeta,
 }) {
+  const controlsPinned = usePresentationUiStore((state) => state.controlsPinned);
+  const setControlsPinned = usePresentationUiStore((state) => state.setControlsPinned);
   const progress = playerState.duration > 0
     ? Math.min(100, (playerState.currentTime / playerState.duration) * 100)
     : 0;
@@ -69,11 +72,21 @@ export function PlayerControlsBar({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
     >
-      <div className="mb-2 flex items-center justify-between gap-3 text-sm text-stone-200">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-sm text-stone-200">
         <div className="max-w-[45vw] truncate rounded-full border border-white/10 bg-stone-950/50 px-3 py-1 text-xs font-medium text-stone-200 sm:max-w-[28rem]">
           Track: <span className="font-semibold text-stone-100">{audioMeta?.fileName || 'demo-story.wav'}</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <label className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-stone-950/50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-200">
+            <input
+              type="checkbox"
+              checked={controlsPinned}
+              onChange={(event) => setControlsPinned(event.target.checked)}
+              className="h-3.5 w-3.5 accent-orange-400"
+              data-testid="pin-controls-toggle"
+            />
+            Pin Controls
+          </label>
           <span>{formatTime(playerState.currentTime)}</span>
           <span>{formatTime(playerState.duration || 120)}</span>
         </div>
@@ -122,6 +135,7 @@ export function PlayerControlsBar({
           multiple
           disabled={isUploadingPhotos}
           onFilesSelected={onPhotoFilesSelected}
+          logPrefix="upload_button.photos"
           buttonTestId="upload-photos-button"
           inputTestId="upload-photos-input"
           className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
@@ -138,6 +152,7 @@ export function PlayerControlsBar({
         <UploadPickerButton
           accept="audio/*"
           onFilesSelected={onAudioFilesSelected}
+          logPrefix="upload_button.audio"
           buttonTestId="upload-audio-button"
           inputTestId="upload-audio-input"
           className="inline-flex items-center justify-center rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
@@ -168,18 +183,25 @@ export function StoryPlayerPanel({
   className = '',
 }) {
   const activeSlide = timeline[playerState.activeSlideIndex] ?? timeline[0] ?? {};
+  const hasActiveSlide = typeof activeSlide?.src === 'string' && activeSlide.src.length > 0;
 
   return (
     <section className="h-full min-h-[100svh]">
       <article className={`scene-shell relative h-full min-h-[100svh] overflow-hidden border-0 bg-stone-900 shadow-2xl shadow-black/40 ${className}`}>
         <div className="absolute inset-0 bg-black" />
         <div className="absolute inset-0 z-10 flex items-center justify-center p-0">
-          <img
-            key={`${activeSlide?.id}-detail`}
-            src={activeSlide?.src}
-            alt={activeSlide?.title}
-            className="block h-full w-full object-contain object-center"
-          />
+          {hasActiveSlide ? (
+            <img
+              key={`${activeSlide?.id}-detail`}
+              src={activeSlide.src}
+              alt={activeSlide?.title || 'Story slide'}
+              className="block h-full w-full object-contain object-center"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-stone-950 text-sm uppercase tracking-[0.2em] text-stone-500">
+              No slide loaded
+            </div>
+          )}
         </div>
       </article>
     </section>

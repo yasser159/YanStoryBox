@@ -1,5 +1,11 @@
 import { expect, test } from '@playwright/test';
 
+async function pinControls(page) {
+  await page.mouse.move(700, 760);
+  await page.getByTestId('pin-controls-toggle').check();
+  await page.waitForTimeout(150);
+}
+
 async function readSceneMetrics(page) {
   return page.evaluate(() => {
     const shell = document.querySelector('.scene-shell');
@@ -60,6 +66,7 @@ test.describe('scene layout', () => {
 
   test('scene and visible slide track the viewport across resize', async ({ page }) => {
     await page.goto('/');
+    await pinControls(page);
 
     for (const viewport of [
       { width: 980, height: 820 },

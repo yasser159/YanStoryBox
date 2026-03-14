@@ -1,14 +1,16 @@
-import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { PhotoManagerPanel } from './components/PhotoManagerPanel';
 import { PlayerControlsBar, StoryPlayerPanel } from './components/StoryPlayerPanel';
 import { useAudioLibrary } from './hooks/useAudioLibrary';
 import { useSlideLibrary } from './hooks/useSlideLibrary';
 import { useStoryPlayer } from './hooks/useStoryPlayer';
+import { selectOverlayVisible, usePresentationUiStore } from './stores/usePresentationUiStore';
 
 export default function App() {
-  const [showOverlayControls, setShowOverlayControls] = useState(false);
-  const [overlayPinned, setOverlayPinned] = useState(false);
+  const overlayVisible = usePresentationUiStore(selectOverlayVisible);
+  const updateOverlayFromPointer = usePresentationUiStore((state) => state.updateOverlayFromPointer);
+  const hideOverlay = usePresentationUiStore((state) => state.hideOverlay);
+  const setOverlayPinned = usePresentationUiStore((state) => state.setOverlayPinned);
   const {
     audioSrc,
     uploadAudioFile,
@@ -21,6 +23,7 @@ export default function App() {
     uploadFiles,
     reorderSlides,
     setSlideCueTime,
+    clearSlideCueTime,
     removeSlide,
     isHydrating,
     isUploadingPhotos,
@@ -43,8 +46,7 @@ export default function App() {
   const handleStagePointerMove = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const relativeY = event.clientY - rect.top;
-    const lowerTriggerStart = rect.height * 0.58;
-    setShowOverlayControls(relativeY >= lowerTriggerStart);
+    updateOverlayFromPointer(relativeY, rect.height);
   };
 
   const handlePhotoFilesSelected = async (files) => {
@@ -69,12 +71,7 @@ export default function App() {
           className="scene-stage relative h-full overflow-hidden"
           style={{ width: '100%', height: '100dvh' }}
           onMouseMove={handleStagePointerMove}
-          onMouseLeave={() => {
-            if (overlayPinned) {
-              return;
-            }
-            setShowOverlayControls(false);
-          }}
+          onMouseLeave={hideOverlay}
         >
           <StoryPlayerPanel
             playerState={playerState}
@@ -82,7 +79,7 @@ export default function App() {
           />
           <motion.div
             className={`media-overlay absolute inset-x-0 z-40 ${
-              showOverlayControls || overlayPinned
+              overlayVisible
                 ? 'visible pointer-events-auto'
                 : 'invisible pointer-events-none'
             }`}
@@ -92,7 +89,7 @@ export default function App() {
               width: '100%',
             }}
             initial={false}
-            animate={showOverlayControls || overlayPinned
+            animate={overlayVisible
               ? { opacity: 1, y: 0 }
               : { opacity: 0, y: 72 }}
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
@@ -116,6 +113,7 @@ export default function App() {
                 persistenceError={persistenceError}
                 reorderSlides={reorderSlides}
                 setSlideCueTime={setSlideCueTime}
+                clearSlideCueTime={clearSlideCueTime}
                 removeSlide={removeSlide}
                 audioError={audioError}
                 trackDuration={playerState.duration}

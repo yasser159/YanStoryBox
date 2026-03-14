@@ -39,6 +39,7 @@ export function PhotoManagerPanel({
   persistenceError,
   reorderSlides,
   setSlideCueTime,
+  clearSlideCueTime,
   removeSlide,
   audioError,
   trackDuration = 0,
@@ -58,6 +59,8 @@ export function PhotoManagerPanel({
   const playheadPercent = trackDuration > 0
     ? Math.min(100, Math.max(0, (currentTime / trackDuration) * 100))
     : 0;
+  const draggedSlide = uploads.find((slide) => slide.id === draggedId);
+  const isDraggedSlidePinned = Number.isFinite(draggedSlide?.cueTime);
 
   const handleCueDrop = (event) => {
     event.preventDefault();
@@ -97,7 +100,25 @@ export function PhotoManagerPanel({
               <div className="mb-4 rounded-[1.5rem] border border-white/10 bg-stone-950/40 p-3">
                 <div className="mb-3 flex items-center justify-between gap-3 text-xs uppercase tracking-[0.18em] text-stone-400">
                   <span>Slide Cue Lane</span>
-                  <span>{formatCueTime(trackDuration)}</span>
+                  <div className="flex items-center gap-3">
+                    <div
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        event.preventDefault();
+                        if (!draggedId) return;
+                        clearSlideCueTime(draggedId);
+                        setDraggedId('');
+                      }}
+                      className={`rounded-full border px-3 py-1 text-[10px] font-semibold tracking-[0.16em] transition ${
+                        draggedId && isDraggedSlidePinned
+                          ? 'border-rose-400/60 bg-rose-400/10 text-rose-100'
+                          : 'border-white/10 bg-black/30 text-stone-400'
+                      }`}
+                    >
+                      Remove From Timeline
+                    </div>
+                    <span>{formatCueTime(trackDuration)}</span>
+                  </div>
                 </div>
                 <div
                   className="relative h-24 rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2"
@@ -141,7 +162,7 @@ export function PhotoManagerPanel({
                   </div>
                 </div>
                 <p className="mt-2 text-xs text-stone-400">
-                  Drag a thumbnail onto the cue lane to pin that image to a specific moment in the track.
+                  Drag a thumbnail onto the cue lane to pin that image to a specific moment in the track. Drag a pinned cue onto Remove From Timeline to send it back to auto timing.
                 </p>
               </div>
             ) : null}
