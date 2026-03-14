@@ -47,32 +47,16 @@ export default function App() {
     setShowOverlayControls(relativeY >= lowerTriggerStart);
   };
 
-  const pinOverlayForPicker = () => {
+  const handlePhotoFilesSelected = async (files) => {
     setOverlayPinned(true);
-
-    const releasePin = () => {
-      window.removeEventListener('focus', releasePin);
-      window.setTimeout(() => {
-        setOverlayPinned(false);
-      }, 300);
-    };
-
-    window.addEventListener('focus', releasePin, { once: true });
-  };
-
-  const handlePhotoInputChange = async (event) => {
-    setOverlayPinned(true);
-    const { files } = event.target;
     await uploadFiles(files);
-    event.target.value = '';
     setOverlayPinned(false);
   };
 
-  const handleAudioInputChange = async (event) => {
+  const handleAudioFilesSelected = async (files) => {
     setOverlayPinned(true);
-    const [file] = Array.from(event.target.files || []);
+    const [file] = Array.from(files || []);
     await uploadAudioFile(file);
-    event.target.value = '';
     setOverlayPinned(false);
   };
 
@@ -120,9 +104,8 @@ export default function App() {
                 rewind={rewind}
                 rewindTenSeconds={rewindTenSeconds}
                 forwardTenSeconds={forwardTenSeconds}
-                onUploadIntent={pinOverlayForPicker}
-                onPhotoInputChange={handlePhotoInputChange}
-                onAudioInputChange={handleAudioInputChange}
+                onPhotoFilesSelected={handlePhotoFilesSelected}
+                onAudioFilesSelected={handleAudioFilesSelected}
                 isUploadingPhotos={isUploadingPhotos}
                 audioMeta={audioMeta}
               />

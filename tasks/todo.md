@@ -17,6 +17,7 @@
 - [x] Add draggable cue timing so uploaded photos can be pinned to specific moments in the track
 - [x] Add 10-second rewind and forward transport controls
 - [x] Replace flaky hidden upload triggers with visible controls that contain the real file inputs
+- [x] Encapsulate upload buttons into a dedicated picker component and protect them with a browser regression test
 
 # Notes
 
@@ -35,6 +36,8 @@
 - Transport decision: the player should expose `-10s` and `+10s` seek controls in the core playback engine so UI transport stays dumb and reusable.
 - Upload control decision: the visible upload buttons should contain the actual file inputs so clicking the control is the native picker target, not a hidden proxy.
 - Picker event decision: keep overlay pinning on the visible wrapper, not on the file input click handler, so the browser sees a clean direct picker interaction.
+- Encapsulation decision: upload picker behavior now lives in a dedicated component with a `FileList`-only callback API so player-layout changes do not rewrite picker internals.
+- Protection decision: upload-picker code is now a protected subsystem because it regressed twice in under 24 hours and one failed fix had to be reverted. Future non-upload tasks should avoid touching the picker component or its click path.
 
 # Kill List
 
@@ -50,6 +53,8 @@
 - Rejected: driving the file picker through `inputRef.current.click()`. Reason: hover/focus timing made the chooser path flaky and looked broken even when the upload code was fine.
 - Rejected: hidden proxy file inputs for the overlay buttons. Reason: browser chooser behavior got too brittle, and the visible control itself should own the picker.
 - Rejected: attaching overlay side effects to the file input `onClick`. Reason: the picker path should stay pure and not depend on click-time state churn.
+- Rejected: leaving upload picker logic embedded in `PlayerControlsBar`. Reason: mixing layout edits with picker behavior keeps causing regressions in an area that should be locked down.
+- Rejected: treating upload-button fixes as done after build-only validation. Reason: this exact path already failed multiple times without throwing code-level errors, so it needs real browser chooser proof every time.
 
 # Review
 
@@ -65,6 +70,8 @@
 - Added 10-second skip-back and skip-forward controls, backed by core seek logic that clamps within the track and updates the active slide immediately.
 - Moved the real photo/audio file inputs into the visible upload controls so clicking the button directly opens the browser picker.
 - Moved overlay pinning off the file input click handler and onto the visible control wrapper to reduce picker-trigger flakiness.
+- Extracted upload picker behavior into a dedicated `UploadPickerButton` component and added a Playwright regression test for the visible photo upload button.
+- Captured the upload-button incident as protected code after repeated regressions and a revert, with explicit rules in project memory for how the picker works and how it must be verified.
 - Verification: `npm run build` passed on 2026-03-13 after the audio upload changes.
 - Verification: Playwright confirmed on 2026-03-13 that the fullscreen stage no longer grows taller than the viewport (`scrollHeight === innerHeight`), top-half hover hides overlays, and lower hover reveals the controls plus thumbnail tray inside the visible screen.
 - Verification: Playwright confirmed on 2026-03-13 that selecting a photo on localhost creates a visible thumb immediately, survives refresh, and logs `photos.upload_fell_back_to_local` when Firebase Storage rejects the upload.

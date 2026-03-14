@@ -44,6 +44,20 @@ async function readSceneMetrics(page) {
 }
 
 test.describe('scene layout', () => {
+  test('visible photo upload button opens a file chooser', async ({ page }) => {
+    await page.goto('/');
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await page.mouse.move(700, 760);
+    await expect(page.getByTestId('upload-photos-button')).toBeVisible();
+
+    const [chooser] = await Promise.all([
+      page.waitForEvent('filechooser'),
+      page.getByTestId('upload-photos-button').click(),
+    ]);
+
+    expect(chooser.isMultiple()).toBeTruthy();
+  });
+
   test('scene and visible slide track the viewport across resize', async ({ page }) => {
     await page.goto('/');
 

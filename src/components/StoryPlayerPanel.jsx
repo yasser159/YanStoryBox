@@ -1,4 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { UploadPickerButton } from './UploadPickerButton';
 
 function formatTime(totalSeconds) {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds || 0));
@@ -52,9 +53,8 @@ export function PlayerControlsBar({
   rewind,
   rewindTenSeconds,
   forwardTenSeconds,
-  onUploadIntent,
-  onPhotoInputChange,
-  onAudioInputChange,
+  onPhotoFilesSelected,
+  onAudioFilesSelected,
   isUploadingPhotos = false,
   audioMeta,
 }) {
@@ -117,39 +117,33 @@ export function PlayerControlsBar({
         >
           +10s
         </button>
-        <label
-          onPointerDown={isUploadingPhotos ? undefined : onUploadIntent}
-          className={`relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full px-4 py-2 text-sm font-semibold transition ${
+        <UploadPickerButton
+          accept="image/*"
+          multiple
+          disabled={isUploadingPhotos}
+          onFilesSelected={onPhotoFilesSelected}
+          buttonTestId="upload-photos-button"
+          inputTestId="upload-photos-input"
+          className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
             isUploadingPhotos
               ? 'cursor-wait bg-orange-300/80 text-stone-900'
               : 'cursor-pointer bg-orange-400 text-stone-950 hover:bg-orange-300'
           }`}
         >
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            disabled={isUploadingPhotos}
-            onChange={onPhotoInputChange}
-            className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-wait"
-          />
           {isUploadingPhotos ? <SpinnerIcon /> : null}
-          <span className="pointer-events-none">
+          <span>
             {isUploadingPhotos ? 'Uploading…' : 'Upload Photos'}
           </span>
-        </label>
-        <label
-          onPointerDown={onUploadIntent}
-          className="relative inline-flex cursor-pointer items-center justify-center overflow-hidden rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
+        </UploadPickerButton>
+        <UploadPickerButton
+          accept="audio/*"
+          onFilesSelected={onAudioFilesSelected}
+          buttonTestId="upload-audio-button"
+          inputTestId="upload-audio-input"
+          className="inline-flex items-center justify-center rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
         >
-          <input
-            type="file"
-            accept="audio/*"
-            onChange={onAudioInputChange}
-            className="absolute inset-0 cursor-pointer opacity-0"
-          />
-          <span className="pointer-events-none">Upload Audio</span>
-        </label>
+          <span>Upload Audio</span>
+        </UploadPickerButton>
       </div>
       <AnimatePresence initial={false}>
         {isUploadingPhotos ? (
