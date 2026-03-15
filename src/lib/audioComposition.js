@@ -1,4 +1,5 @@
 export const DEFAULT_TARGET_DURATION_SECONDS = 120;
+const DEFAULT_WAVEFORM_SAMPLES = 72;
 
 function stripExtension(fileName) {
   return fileName.replace(/\.[^.]+$/, '');
@@ -44,6 +45,7 @@ export function buildAudioClipRecord({
   storagePath,
   storageMode,
   durationSeconds,
+  waveformPeaks = [],
   createdAt = new Date().toISOString(),
   desiredStartTime = null,
 }) {
@@ -58,12 +60,54 @@ export function buildAudioClipRecord({
     storagePath,
     storageMode,
     durationSeconds,
+    waveformPeaks: Array.isArray(waveformPeaks) ? waveformPeaks : [],
     desiredStartTime: Number.isFinite(desiredStartTime) ? desiredStartTime : null,
   };
 }
 
+export function buildWaveformPeaks(channelData, sampleCount = DEFAULT_WAVEFORM_SAMPLES) {
+  if (!channelData || channelData.length === 0 || !Number.isFinite(sampleCount) || sampleCount <= 0) {
+    return [];
+  }
+
+  const safeSampleCount = Math.max(1, Math.floor(sampleCount));
+  const blockSize = Math.max(1, Math.floor(channelData.length / safeSampleCount));
+  const peaks = [];
+
+  for (let index = 0; index < safeSampleCount; index += 1) {
+    const start = index * blockSize;
+    const end = Math.min(channelData.length, start + blockSize);
+    let peak = 0;
+
+    for (let cursor = start; cursor < end; cursor += 1) {
+      peak = Math.max(peak, Math.abs(channelData[cursor] || 0));
+    }
+
+    peaks.push(Number(peak.toFixed(4)));
+  }
+
+  const maxPeak = Math.max(...peaks, 0);
+  if (maxPeak <= 0) {
+    return peaks.map(() => 0);
+  }
+
+  return peaks.map((peak) => Number((peak / maxPeak).toFixed(4)));
+}
+
+export function resolveAudioClipDropStartTime({
+  dropTime,
+  dragOffsetSeconds = 0,
+  targetDurationSeconds,
+  snapWindowSeconds = 2.5,
+}) {
+  const adjustedTime = clampTime(dropTime - dragOffsetSeconds, targetDurationSeconds);
+  const safeSnapWindow = Number.isFinite(snapWindowSeconds) ? Math.max(0, snapWindowSeconds) : 0;
+  return adjustedTime <= safeSnapWindow ? 0 : adjustedTime;
+}
+
 export async function extractAudioFileMetadata(file) {
   const objectUrl = URL.createObjectURL(file);
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
 
   try {
     const durationSeconds = await new Promise((resolve, reject) => {
@@ -90,8 +134,28 @@ export async function extractAudioFileMetadata(file) {
       audio.src = objectUrl;
     });
 
+    if (!AudioContextCtor) {
+      throw new Error('Waveform extraction is not supported in this browser.');
+    }
+
+    const context = new AudioContextCtor();
+    let waveformPeaks = [];
+    try {
+      const buffer = await file.arrayBuffer();
+      const audioBuffer = await context.decodeAudioData(buffer.slice(0));
+      const channelData = audioBuffer.getChannelData(0);
+      waveformPeaks = buildWaveformPeaks(channelData);
+    } finally {
+      await context.close().catch(() => {});
+    }
+
+    if (!waveformPeaks.length) {
+      throw new Error('Failed to extract waveform data from uploaded audio.');
+    }
+
     return {
       durationSeconds,
+      waveformPeaks,
     };
   } finally {
     URL.revokeObjectURL(objectUrl);

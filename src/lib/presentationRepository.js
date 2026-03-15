@@ -69,6 +69,7 @@ function mapAudioClipRecord(record) {
     storagePath: record.storagePath,
     storageMode: record.storageMode || 'remote',
     durationSeconds: Number.isFinite(record.durationSeconds) ? record.durationSeconds : null,
+    waveformPeaks: Array.isArray(record.waveformPeaks) ? record.waveformPeaks : [],
     desiredStartTime: Number.isFinite(record.desiredStartTime) ? record.desiredStartTime : null,
   };
 }
@@ -177,6 +178,7 @@ export async function uploadAudioClips(filesWithMetadata) {
       storagePath: asset.storagePath,
       storageMode: 'remote',
       durationSeconds: metadata.durationSeconds,
+      waveformPeaks: metadata.waveformPeaks,
       createdAt,
     }));
   }

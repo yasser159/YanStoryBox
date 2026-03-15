@@ -3,6 +3,7 @@
 - [x] Inspect the shared read-head and timeline interaction surfaces
 - [x] Move read-head dragging to a dedicated middle-gap handle and stop lane drag hijacking
 - [x] Remove the visual lane title and verify click-to-seek plus handle-drag behavior
+- [x] Make audio clips easier to drag back to true 0 seconds on the lane
 
 - [x] Review current React app for functional bugs and regressions
 - [x] Verify suspect UI/core interactions in slide, audio, and player flows
@@ -117,6 +118,7 @@
 - Rejected: driving the multi-clip audio lane purely from the HTML audio element clock. Reason: gaps between clips and manual placement need a global composition clock, or playback starts lying about time.
 - Rejected: a tiny playhead handle as the primary transport affordance. Reason: with two timelines stacked, the read head needs to read like one tall needle, not a little orange thumbtack.
 - Rejected: making the whole lane surface a read-head drag target. Reason: that setup keeps hijacking timeline-item drags like a sticky-fingered bartender grabbing the wrong tab.
+- Rejected: forcing exact-pixel drops to hit `0s` on the audio lane. Reason: that makes the left edge feel busted even when the math is technically “correct.”
 
 # Review
 
@@ -181,6 +183,8 @@
 - Hardened audio metadata extraction so uploads fail when waveform decoding fails, instead of silently faking waveform visuals.
 - Reworked the shared playhead into one tall vertical read-head line spanning both timelines, with drag/click seeking from either lane.
 - Moved read-head dragging onto a dedicated middle-gap handle, removed the `Visual Cue Lane` title, and changed the lane surfaces back to click-to-seek so audio and visual blocks keep their own drag gestures.
+- Added a snap-to-start zone on the audio lane so clips dropped near the left edge land at `0s` instead of requiring a surgical-perfect drop.
+- Fixed audio-lane drag anchoring so existing clips place by their left edge instead of the mouse hotspot, which was making “move it to 0 seconds” feel fake-broken.
 - Added diagnostics for uploaded-but-unplaced audio, active clip selection, source swaps, and composed clip playback events.
 - Added a Chromium regression proving a placed audio clip actually advances the underlying audio element during playback.
 - Verification: `npm run test:unit` passed on 2026-03-15 after the composed audio clock refactor.

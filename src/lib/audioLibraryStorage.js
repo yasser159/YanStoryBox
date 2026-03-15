@@ -71,6 +71,7 @@ export async function loadAudioLane() {
           src: URL.createObjectURL(clip.blob),
           blob: clip.blob,
           durationSeconds: Number.isFinite(clip.durationSeconds) ? clip.durationSeconds : null,
+          waveformPeaks: Array.isArray(clip.waveformPeaks) ? clip.waveformPeaks : [],
           desiredStartTime: Number.isFinite(clip.desiredStartTime) ? clip.desiredStartTime : null,
         }))
         : [];
@@ -98,6 +99,7 @@ export async function saveAudioLane({ targetDurationSeconds, audioClips, audioTi
         createdAt: clip.createdAt,
         storageMode: clip.storageMode || 'local',
         durationSeconds: Number.isFinite(clip.durationSeconds) ? clip.durationSeconds : null,
+        waveformPeaks: Array.isArray(clip.waveformPeaks) ? clip.waveformPeaks : [],
         desiredStartTime: Number.isFinite(clip.desiredStartTime) ? clip.desiredStartTime : null,
         blob: clip.blob,
       })),

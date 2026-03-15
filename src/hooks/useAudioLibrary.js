@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { storyAudio } from '../data/storyMedia';
 import { logEvent } from '../lib/logger';
 import {
-  autoPlaceAudioClipsSequentially,
   buildAudioClipRecord,
   buildAudioTimeline,
   clearAudioClipPlacement,
@@ -31,6 +30,7 @@ function normalizeClipRecord(clip) {
     ...clip,
     kind: 'upload',
     durationSeconds: Number.isFinite(clip.durationSeconds) ? clip.durationSeconds : null,
+    waveformPeaks: Array.isArray(clip.waveformPeaks) ? clip.waveformPeaks : [],
     desiredStartTime: Number.isFinite(clip.desiredStartTime) ? clip.desiredStartTime : null,
     storageMode: clip.storageMode || 'remote',
   };
@@ -65,6 +65,15 @@ export function useAudioLibrary() {
       })),
     });
   }, [audioClips.length, audioTimelineState.clips, targetDurationSeconds]);
+
+  useEffect(() => {
+    if (audioClips.length > 0 && audioTimelineState.clips.length === 0) {
+      logEvent('warn', 'audio_lane.uploaded_but_unplaced', {
+        uploadedClipCount: audioClips.length,
+        targetDurationSeconds,
+      });
+    }
+  }, [audioClips.length, audioTimelineState.clips.length, targetDurationSeconds]);
 
   const persistAudioLane = async (clips, nextTargetDurationSeconds, timeline = buildAudioTimeline(clips, nextTargetDurationSeconds).clips) => {
     const payload = {
@@ -222,6 +231,11 @@ export function useAudioLibrary() {
 
       try {
         const metadata = await extractAudioFileMetadata(file);
+        logEvent('info', 'audio_lane.clip_metadata_loaded', {
+          fileName: file.name,
+          durationSeconds: metadata.durationSeconds,
+          waveformSamples: metadata.waveformPeaks?.length || 0,
+        });
         preparedFiles.push({ file, metadata });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to read uploaded audio metadata.';
@@ -243,6 +257,7 @@ export function useAudioLibrary() {
       src: URL.createObjectURL(file),
       storageMode: 'local',
       durationSeconds: metadata.durationSeconds,
+      waveformPeaks: metadata.waveformPeaks,
     })
   )).map((clip, index) => ({
     ...clip,
@@ -272,11 +287,7 @@ export function useAudioLibrary() {
 
     try {
       if (audioLibraryMode === 'local') {
-        const nextLocalClips = autoPlaceAudioClipsSequentially(
-          previousClips,
-          createLocalAudioClips(preparedFiles),
-          targetDurationSeconds,
-        );
+        const nextLocalClips = createLocalAudioClips(preparedFiles);
         const nextClips = [...previousClips, ...nextLocalClips];
         const nextTimeline = buildAudioTimeline(nextClips, targetDurationSeconds).clips;
         setAudioClips(nextClips);
@@ -294,27 +305,15 @@ export function useAudioLibrary() {
       }
 
       const remoteClips = await uploadAudioClips(preparedFiles);
-      const placedClips = autoPlaceAudioClipsSequentially(previousClips, remoteClips, targetDurationSeconds);
-      const nextClips = [...previousClips, ...placedClips];
+      const nextClips = [...previousClips, ...remoteClips];
       const nextTimeline = buildAudioTimeline(nextClips, targetDurationSeconds).clips;
       setAudioClips(nextClips);
       await persistAudioLane(nextClips, targetDurationSeconds, nextTimeline);
       setAudioError('');
 
-      nextTimeline
-        .filter((clip) => clip.clamped)
-        .forEach((clip) => {
-          logEvent('warn', 'audio_lane.clip_clamped', {
-            clipId: clip.id,
-            startTime: clip.startTime,
-            endTime: clip.endTime,
-            targetDurationSeconds,
-          });
-        });
-
       logEvent('info', 'audio_lane.clip_upload_succeeded', {
-        clipCount: placedClips.length,
-        clipIds: placedClips.map((clip) => clip.id),
+        clipCount: remoteClips.length,
+        clipIds: remoteClips.map((clip) => clip.id),
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to store uploaded audio clips.';
@@ -328,11 +327,7 @@ export function useAudioLibrary() {
         return;
       }
 
-      const localClips = autoPlaceAudioClipsSequentially(
-        previousClips,
-        createLocalAudioClips(preparedFiles),
-        targetDurationSeconds,
-      );
+      const localClips = createLocalAudioClips(preparedFiles);
       const nextClips = [...previousClips, ...localClips];
       const nextTimeline = buildAudioTimeline(nextClips, targetDurationSeconds).clips;
       setAudioClips(nextClips);

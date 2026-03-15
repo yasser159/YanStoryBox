@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
-  autoPlaceAudioClipsSequentially,
+  buildWaveformPeaks,
   buildAudioTimeline,
   parseDurationInput,
   placeAudioClipAtTime,
+  resolveAudioClipDropStartTime,
 } from '../../src/lib/audioComposition';
 
 function clip(id, durationSeconds, desiredStartTime = null) {
@@ -29,14 +30,11 @@ describe('audio composition helpers', () => {
     expect(parseDurationInput('trash')).toBeNull();
   });
 
-  it('auto places uploaded clips sequentially to fill the target duration', () => {
-    const placed = autoPlaceAudioClipsSequentially(
-      [clip('existing', 12, 0)],
-      [clip('new-a', 15), clip('new-b', 20)],
-      40,
-    );
-
-    expect(placed.map((item) => item.desiredStartTime)).toEqual([12, 27]);
+  it('normalizes waveform peaks from source samples', () => {
+    const peaks = buildWaveformPeaks(Float32Array.from([0, 0.2, -0.4, 0.8, -1, 0.5]), 3);
+    expect(peaks).toHaveLength(3);
+    expect(Math.max(...peaks)).toBe(1);
+    expect(Math.min(...peaks)).toBeGreaterThanOrEqual(0);
   });
 
   it('builds a non-overlapping timeline and clamps the last clip to target duration', () => {
@@ -68,5 +66,28 @@ describe('audio composition helpers', () => {
     const timeline = buildAudioTimeline(updated, 40);
     expect(timeline.clips.map((item) => item.id)).toEqual(['a', 'b']);
     expect(timeline.clips.map((item) => item.startTime)).toEqual([0, 10]);
+  });
+
+  it('keeps uploaded clips unplaced until the user drags them onto the lane', () => {
+    const timeline = buildAudioTimeline([
+      clip('loose-a', 10, null),
+      clip('loose-b', 12, null),
+    ], 40);
+
+    expect(timeline.clips).toEqual([]);
+  });
+
+  it('resolves dropped audio clips from the clip left edge, not the cursor hotspot', () => {
+    expect(resolveAudioClipDropStartTime({
+      dropTime: 3,
+      dragOffsetSeconds: 2.2,
+      targetDurationSeconds: 120,
+    })).toBe(0);
+
+    expect(resolveAudioClipDropStartTime({
+      dropTime: 35,
+      dragOffsetSeconds: 4,
+      targetDurationSeconds: 120,
+    })).toBe(31);
   });
 });

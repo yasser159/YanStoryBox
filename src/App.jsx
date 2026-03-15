@@ -5,6 +5,7 @@ import { PlayerControlsBar, StoryPlayerPanel } from './components/StoryPlayerPan
 import { useAudioLibrary } from './hooks/useAudioLibrary';
 import { useSlideLibrary } from './hooks/useSlideLibrary';
 import { useStoryPlayer } from './hooks/useStoryPlayer';
+import { getMediaTypeFromMimeType } from './lib/visualMedia';
 import { selectOverlayVisible, usePresentationUiStore } from './stores/usePresentationUiStore';
 
 export default function App() {
@@ -49,6 +50,7 @@ export default function App() {
     rewind,
     rewindTenSeconds,
     forwardTenSeconds,
+    seekTo,
   } = useStoryPlayer({
     audioSrc,
     audioTimeline,
@@ -67,16 +69,26 @@ export default function App() {
     updateOverlayFromPointer(relativeY, rect.height);
   };
 
-  const handlePhotoFilesSelected = async (files) => {
-    setOverlayPinned(true);
-    await uploadFiles(files);
-    setOverlayPinned(false);
-  };
+  const handleMediaFilesSelected = async (files) => {
+    const allFiles = Array.from(files || []);
+    if (!allFiles.length) {
+      return;
+    }
 
-  const handleAudioFilesSelected = async (files) => {
+    const visualFiles = allFiles.filter((file) => Boolean(getMediaTypeFromMimeType(file.type)));
+    const audioFiles = allFiles.filter((file) => file.type?.startsWith('audio/'));
+
     setOverlayPinned(true);
-    await uploadAudioFiles(files);
-    setOverlayPinned(false);
+    try {
+      if (visualFiles.length) {
+        await uploadFiles(visualFiles);
+      }
+      if (audioFiles.length) {
+        await uploadAudioFiles(audioFiles);
+      }
+    } finally {
+      setOverlayPinned(false);
+    }
   };
 
   return (
@@ -118,10 +130,8 @@ export default function App() {
                 rewind={rewind}
                 rewindTenSeconds={rewindTenSeconds}
                 forwardTenSeconds={forwardTenSeconds}
-                onPhotoFilesSelected={handlePhotoFilesSelected}
-                onAudioFilesSelected={handleAudioFilesSelected}
-                isUploadingPhotos={isUploadingPhotos}
-                isUploadingAudio={isUploadingAudio}
+                onMediaFilesSelected={handleMediaFilesSelected}
+                isUploadingMedia={isUploadingPhotos || isUploadingAudio}
                 audioMeta={audioMeta}
               />
               <PhotoManagerPanel
@@ -145,6 +155,7 @@ export default function App() {
                 audioError={audioError}
                 trackDuration={playerState.duration}
                 currentTime={playerState.currentTime}
+                onSeekTimeline={seekTo}
                 embedded
                 className="media-tray h-full min-h-0"
               />

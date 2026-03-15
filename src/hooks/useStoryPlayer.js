@@ -83,6 +83,7 @@ export function useStoryPlayer({ audioSrc, audioTimeline, durationHint = 0, slid
     rewind: () => playerRef.current?.rewind(),
     rewindTenSeconds: () => playerRef.current?.rewindTenSeconds(),
     forwardTenSeconds: () => playerRef.current?.forwardTenSeconds(),
+    seekTo: (nextTime) => playerRef.current?.seekTo(nextTime),
     pause: () => playerRef.current?.pause(),
   };
 }

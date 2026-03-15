@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { canRemoveCueFromTimeline } from '../lib/cueRemoval';
-import { formatDurationLabel } from '../lib/audioComposition';
+import { formatDurationLabel, resolveAudioClipDropStartTime } from '../lib/audioComposition';
 import { buildCueLaneTimeline } from '../lib/timeline';
 
 const EMPTY_DRAG_STATE = {
   id: '',
   source: '',
   kind: '',
+  offsetSeconds: 0,
 };
 
 function EmptyState({ isHydrating }) {
@@ -276,13 +277,18 @@ export function PhotoManagerPanel({
                               setDragState({ id: clip.id, source: 'audio-library', kind: 'audio' });
                             }}
                             onDragEnd={() => setDragState(EMPTY_DRAG_STATE)}
-                            className={`grid cursor-grab grid-cols-[minmax(0,1fr)_7rem] items-center gap-3 border-t border-white/5 px-4 py-3 text-sm transition first:border-t-0 ${isPinned ? 'bg-cyan-300/10 text-cyan-50' : 'text-stone-100'} ${dragState.id === clip.id ? 'opacity-60' : ''}`}
+                            className={`border-t border-white/5 px-3 py-2 transition first:border-t-0 ${dragState.id === clip.id ? 'opacity-60' : ''}`}
                             data-testid={`audio-library-clip-${clip.id}`}
                           >
-                            <span className="truncate font-medium">{clip.fileName}</span>
-                            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-400">
-                              {formatDurationLabel(clip.durationSeconds || 0)}
-                            </span>
+                            <div className={`grid cursor-grab grid-cols-[minmax(0,1fr)_7rem] items-center gap-3 rounded-xl border px-3 py-3 text-sm transition ${isPinned ? 'border-cyan-200/45 bg-cyan-300/12 text-cyan-50' : 'border-white/10 bg-white/[0.03] text-stone-100'}`}>
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="shrink-0" aria-hidden="true">🎵</span>
+                                <span className="truncate font-medium">{clip.fileName}</span>
+                              </div>
+                              <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-400">
+                                {formatDurationLabel(clip.durationSeconds || 0)}
+                              </span>
+                            </div>
                           </div>
                         );
                       })}
@@ -325,7 +331,16 @@ export function PhotoManagerPanel({
                             return;
                           }
                           setDropHandled(true);
-                          setAudioClipStartTime(dragState.id, clampDropTime(event, effectiveDuration));
+                          const dropTime = clampDropTime(event, effectiveDuration);
+                          setAudioClipStartTime(
+                            dragState.id,
+                            resolveAudioClipDropStartTime({
+                              dropTime,
+                              dragOffsetSeconds: dragState.offsetSeconds,
+                              targetDurationSeconds: effectiveDuration,
+                              snapWindowSeconds: Math.min(2.5, effectiveDuration * 0.04),
+                            }),
+                          );
                           setDragState(EMPTY_DRAG_STATE);
                         }}
                         data-testid="audio-timeline-lane"
@@ -346,9 +361,20 @@ export function PhotoManagerPanel({
                             <div
                               key={clip.id}
                               draggable
-                              onDragStart={() => {
+                              onDragStart={(event) => {
+                                const markerRect = event.currentTarget.getBoundingClientRect();
+                                const relativeX = Math.min(
+                                  Math.max(0, event.clientX - markerRect.left),
+                                  markerRect.width,
+                                );
+                                const widthRatio = markerRect.width > 0 ? (relativeX / markerRect.width) : 0;
                                 setDropHandled(false);
-                                setDragState({ id: clip.id, source: 'audio-lane', kind: 'audio' });
+                                setDragState({
+                                  id: clip.id,
+                                  source: 'audio-lane',
+                                  kind: 'audio',
+                                  offsetSeconds: (clip.spanSeconds || clip.durationSeconds || 0) * widthRatio,
+                                });
                               }}
                               onDragEnd={() => {
                                 const shouldRemoveFromTimeline = !dropHandled && Number.isFinite(clip.desiredStartTime);

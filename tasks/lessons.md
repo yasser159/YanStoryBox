@@ -18,3 +18,5 @@
 - If drag-end coordinates still act flaky, stop guessing and track valid drop-target presence directly during the drag. The browser may lie about the ending details, but it’s much harder for it to lie about whether you were over the lane or not.
 - And if the target state still gets stuck, update that state from the dragged element’s own live coordinates, not just from the drop zones. Otherwise the lane can keep thinking the cue never left.
 - When the browser keeps fighting “drag out to remove,” stop being romantic and switch to explicit removal targets. A fat remove strip plus an `X` button beats chasing HTML5 drag ghosts all night.
+- For timeline placement near `0s`, add a left-edge snap zone instead of demanding pixel-perfect drops. If users say “I can’t get it to the front,” the math is probably being too precious.
+- For dragging an existing timeline block, compute placement from the block's grabbed offset, not just the cursor drop point. Otherwise dropping “at the front” still leaves the clip hanging a few seconds in like it caught its coat on a nail.

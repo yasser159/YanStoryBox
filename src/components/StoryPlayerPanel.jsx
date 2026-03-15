@@ -55,10 +55,8 @@ export function PlayerControlsBar({
   rewind,
   rewindTenSeconds,
   forwardTenSeconds,
-  onPhotoFilesSelected,
-  onAudioFilesSelected,
-  isUploadingPhotos = false,
-  isUploadingAudio = false,
+  onMediaFilesSelected,
+  isUploadingMedia = false,
   audioMeta,
 }) {
   const progress = playerState.duration > 0
@@ -121,43 +119,27 @@ export function PlayerControlsBar({
           +10s
         </button>
         <UploadPickerButton
-          accept="image/*,video/*"
+          accept="image/*,video/*,audio/*"
           multiple
-          disabled={isUploadingPhotos}
-          onFilesSelected={onPhotoFilesSelected}
-          logPrefix="upload_button.photos"
-          buttonTestId="upload-photos-button"
-          inputTestId="upload-photos-input"
+          disabled={isUploadingMedia}
+          onFilesSelected={onMediaFilesSelected}
+          logPrefix="upload_button.media"
+          buttonTestId="upload-media-button"
+          inputTestId="upload-media-input"
           className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
-            isUploadingPhotos
+            isUploadingMedia
               ? 'cursor-wait bg-orange-300/80 text-stone-900'
               : 'cursor-pointer bg-orange-400 text-stone-950 hover:bg-orange-300'
           }`}
         >
-          {isUploadingPhotos ? <SpinnerIcon /> : null}
+          {isUploadingMedia ? <SpinnerIcon /> : null}
           <span>
-            {isUploadingPhotos ? 'Uploading…' : 'Upload Visuals'}
+            {isUploadingMedia ? 'Uploading…' : 'Upload Media'}
           </span>
-        </UploadPickerButton>
-        <UploadPickerButton
-          accept="audio/*"
-          multiple
-          disabled={isUploadingAudio}
-          onFilesSelected={onAudioFilesSelected}
-          logPrefix="upload_button.audio"
-          buttonTestId="upload-audio-button"
-          inputTestId="upload-audio-input"
-          className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${
-            isUploadingAudio
-              ? 'cursor-wait bg-orange-300/80 text-stone-900'
-              : 'bg-orange-400 text-stone-950 hover:bg-orange-300'
-          }`}
-        >
-          <span>{isUploadingAudio ? 'Uploading Audio…' : 'Upload Audio'}</span>
         </UploadPickerButton>
       </div>
       <AnimatePresence initial={false}>
-        {isUploadingPhotos ? (
+        {isUploadingMedia ? (
           <motion.div
             className="mt-3 text-center text-xs font-medium uppercase tracking-[0.2em] text-orange-100/85"
             initial={{ opacity: 0, y: 6 }}
@@ -165,7 +147,7 @@ export function PlayerControlsBar({
             exit={{ opacity: 0, y: 6 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
           >
-            Loading images to Firebase storage. Wait a beat.
+            Loading media to Firebase storage. Wait a beat.
           </motion.div>
         ) : null}
       </AnimatePresence>
