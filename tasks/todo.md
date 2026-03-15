@@ -4,6 +4,8 @@
 - [x] Move read-head dragging to a dedicated middle-gap handle and stop lane drag hijacking
 - [x] Remove the visual lane title and verify click-to-seek plus handle-drag behavior
 - [x] Make audio clips easier to drag back to true 0 seconds on the lane
+- [x] Raise the shared read-head handle and swap bar waveforms for a continuous wave shape
+- [x] Replace the custom audio waveform renderer with a standard waveform library
 
 - [x] Review current React app for functional bugs and regressions
 - [x] Verify suspect UI/core interactions in slide, audio, and player flows
@@ -119,6 +121,8 @@
 - Rejected: a tiny playhead handle as the primary transport affordance. Reason: with two timelines stacked, the read head needs to read like one tall needle, not a little orange thumbtack.
 - Rejected: making the whole lane surface a read-head drag target. Reason: that setup keeps hijacking timeline-item drags like a sticky-fingered bartender grabbing the wrong tab.
 - Rejected: forcing exact-pixel drops to hit `0s` on the audio lane. Reason: that makes the left edge feel busted even when the math is technically “correct.”
+- Rejected: rendering audio waveforms as plain bars forever. Reason: once the lane is supposed to feel like a real track, fence-post bars look fake as hell.
+- Rejected: keeping a home-grown SVG waveform once the user explicitly asked for something standard. Reason: custom waveform code is cute until it becomes another maintenance side quest.
 
 # Review
 
@@ -185,6 +189,8 @@
 - Moved read-head dragging onto a dedicated middle-gap handle, removed the `Visual Cue Lane` title, and changed the lane surfaces back to click-to-seek so audio and visual blocks keep their own drag gestures.
 - Added a snap-to-start zone on the audio lane so clips dropped near the left edge land at `0s` instead of requiring a surgical-perfect drop.
 - Fixed audio-lane drag anchoring so existing clips place by their left edge instead of the mouse hotspot, which was making “move it to 0 seconds” feel fake-broken.
+- Replaced the audio block bars with a mirrored SVG waveform shape and nudged the shared read-head handle upward so it sits cleaner in the gap between the two lanes.
+- Replaced the custom audio waveform renderer with `wavesurfer.js`, boxed behind a dedicated component so the timeline UI stops carrying hand-rolled waveform code.
 - Added diagnostics for uploaded-but-unplaced audio, active clip selection, source swaps, and composed clip playback events.
 - Added a Chromium regression proving a placed audio clip actually advances the underlying audio element during playback.
 - Verification: `npm run test:unit` passed on 2026-03-15 after the composed audio clock refactor.

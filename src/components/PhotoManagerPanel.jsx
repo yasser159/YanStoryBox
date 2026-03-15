@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { AudioWaveformPreview } from './AudioWaveformPreview';
 import { canRemoveCueFromTimeline } from '../lib/cueRemoval';
 import { formatDurationLabel, resolveAudioClipDropStartTime } from '../lib/audioComposition';
 import { buildCueLaneTimeline } from '../lib/timeline';
@@ -9,6 +10,9 @@ const EMPTY_DRAG_STATE = {
   kind: '',
   offsetSeconds: 0,
 };
+
+const TIMELINE_LANE_HEIGHT_CLASS = 'h-36';
+const SHARED_HANDLE_TOP_CLASS = 'top-[calc(9rem+0.5rem)]';
 
 function EmptyState({ isHydrating }) {
   return (
@@ -62,34 +66,6 @@ function PlayBadge() {
           <path d="M8.75 6.2c0-1.02 1.1-1.66 1.99-1.15l8.11 4.67c.89.51.89 1.79 0 2.3l-8.11 4.67c-.89.51-1.99-.13-1.99-1.15V6.2Z" />
         </svg>
       </div>
-    </div>
-  );
-}
-
-function AudioWaveform({ peaks }) {
-  const safePeaks = Array.isArray(peaks) && peaks.length ? peaks : [];
-
-  if (!safePeaks.length) {
-    return (
-      <div className="flex h-full items-center">
-        <span className="w-full border-t border-dashed border-cyan-100/35" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex h-full w-full items-end gap-px">
-      {safePeaks.map((peak, index) => {
-        const heightPercent = Math.max(10, Math.round((peak || 0) * 100));
-        return (
-          <span
-            // eslint-disable-next-line react/no-array-index-key
-            key={`wave-${index}`}
-            className="flex-1 rounded-full bg-cyan-100/85"
-            style={{ height: `${heightPercent}%` }}
-          />
-        );
-      })}
     </div>
   );
 }
@@ -232,10 +208,6 @@ export function PhotoManagerPanel({
             <div className="sticky top-0 z-10 shrink-0 space-y-4 bg-gradient-to-b from-stone-950/95 via-stone-950/90 to-stone-950/40 pb-4 backdrop-blur" data-testid="timeline-stack">
               <div className="rounded-[1.5rem] border border-white/10 bg-stone-950/40 p-3">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-stone-400">Audio Lane</p>
-                    <p className="mt-1 text-xs text-stone-500">Uploaded audio files sit in the table first. Drag rows onto the lane when you want them in the mix.</p>
-                  </div>
                   <form
                     className="flex items-center gap-2"
                     onSubmit={(event) => {
@@ -315,7 +287,7 @@ export function PhotoManagerPanel({
                   </div>
 
                   <div className="relative space-y-4">
-                    <div className="relative h-20 rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2">
+                    <div className={`relative ${TIMELINE_LANE_HEIGHT_CLASS} rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2`}>
                       <div
                         className="absolute inset-x-3 bottom-2 top-2"
                         onClick={(event) => {
@@ -354,7 +326,7 @@ export function PhotoManagerPanel({
                         {audioTimeline.map((clip) => {
                           const leftPercent = effectiveDuration > 0 ? (clip.startTime / effectiveDuration) * 100 : 0;
                           const width = effectiveDuration > 0
-                            ? `max(5rem, ${(Math.max(clip.spanSeconds, 1) / effectiveDuration) * 100}%)`
+                            ? `max(5.5rem, ${(Math.max(clip.spanSeconds, 1) / effectiveDuration) * 100}%)`
                             : '5rem';
 
                           return (
@@ -388,13 +360,13 @@ export function PhotoManagerPanel({
                               style={{ left: `${leftPercent}%`, width }}
                               data-testid={`audio-clip-marker-${clip.id}`}
                             >
-                              <div className="flex h-full flex-col overflow-hidden rounded-xl border border-cyan-200/60 bg-gradient-to-b from-cyan-300/20 via-cyan-300/12 to-cyan-400/10 px-2 py-2 text-xs font-semibold text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                              <div className="relative flex h-full flex-col overflow-hidden rounded-xl border border-cyan-200/60 bg-gradient-to-b from-cyan-300/20 via-cyan-300/12 to-cyan-400/10 px-2 py-2 text-xs font-semibold text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
                                 <div className="flex items-center gap-1.5 truncate">
                                   <span className="shrink-0" aria-hidden="true">🎵</span>
                                   <span className="truncate">{clip.title}</span>
                                 </div>
                                 <div className="mt-2 min-h-0 flex-1">
-                                  <AudioWaveform peaks={clip.waveformPeaks} />
+                                  <AudioWaveformPreview peaks={clip.waveformPeaks} durationSeconds={clip.durationSeconds} />
                                 </div>
                               </div>
                             </div>
@@ -405,7 +377,7 @@ export function PhotoManagerPanel({
 
                     {effectiveDuration > 0 ? (
                       <div className="rounded-[1.5rem] border border-white/10 bg-stone-950/40 p-3">
-                        <div className="relative h-24 rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2" data-testid="cue-timeline-shell">
+                        <div className={`relative ${TIMELINE_LANE_HEIGHT_CLASS} rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2`} data-testid="cue-timeline-shell">
                           <div
                             className="absolute inset-x-3 bottom-5 top-2"
                             onClick={(event) => {
@@ -437,8 +409,8 @@ export function PhotoManagerPanel({
                               const isActive = slide.id === activeSlideId;
                               const isVideo = slide.mediaType === 'video';
                               const blockWidth = isVideo && effectiveDuration > 0
-                                ? `max(4.5rem, ${(Math.max(slide.spanSeconds || slide.durationSeconds || 1, 1) / effectiveDuration) * 100}%)`
-                                : '3.5rem';
+                                ? `max(6rem, ${(Math.max(slide.spanSeconds || slide.durationSeconds || 1, 1) / effectiveDuration) * 100}%)`
+                                : '5rem';
 
                               return (
                                 <div
@@ -471,7 +443,7 @@ export function PhotoManagerPanel({
                                   <div className={`relative overflow-hidden rounded-lg border ${isActive ? 'border-orange-300/70' : 'border-white/15'} ${isVideo ? 'w-full' : ''}`}>
                                     <VisualThumb
                                       slide={slide}
-                                      className={isVideo ? 'h-10 w-full object-cover' : 'h-10 w-10 object-cover'}
+                                      className={isVideo ? 'h-14 w-full object-cover' : 'h-14 w-14 object-cover'}
                                     />
                                   </div>
                                   <div className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${isActive ? 'bg-orange-300 text-stone-950' : 'bg-black/70 text-stone-100'}`}>
@@ -504,7 +476,7 @@ export function PhotoManagerPanel({
                             setPlayheadDragging(true);
                             seekFromClientX(event.clientX);
                           }}
-                          className="pointer-events-auto absolute left-1/2 top-[calc(5rem+0.5rem)] flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full border border-orange-100/80 bg-orange-300 text-stone-950 shadow-lg shadow-orange-300/30"
+                          className={`pointer-events-auto absolute left-1/2 ${SHARED_HANDLE_TOP_CLASS} flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full border border-orange-100/80 bg-orange-300 text-stone-950 shadow-lg shadow-orange-300/30`}
                           aria-label="Drag timeline read head"
                           data-testid="shared-playhead-handle"
                         >
@@ -520,10 +492,6 @@ export function PhotoManagerPanel({
             <div className="mt-2 min-h-0 flex-1 overflow-auto pr-1" data-testid="media-library-scroll">
               {uploads.length ? (
                 <section>
-                  <div className="mb-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-stone-400">Visual Library</p>
-                    <p className="mt-1 text-xs text-stone-500">Drag visuals onto the visual lane to pin them. The grid below still reorders slideshow fallback timing.</p>
-                  </div>
                   <div className="grid w-full grid-cols-[repeat(auto-fit,minmax(4rem,10rem))] justify-center gap-2">
                     {uploads.map((slide, index) => {
                       const isActive = slide.id === activeSlideId;
