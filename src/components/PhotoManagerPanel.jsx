@@ -1,4 +1,10 @@
 import { useState } from 'react';
+import { canRemoveCueFromTimeline } from '../lib/cueRemoval';
+
+const EMPTY_DRAG_STATE = {
+  id: '',
+  source: '',
+};
 
 function EmptyState({ isHydrating }) {
   return (
@@ -48,8 +54,10 @@ export function PhotoManagerPanel({
   style,
   embedded = false,
 }) {
-  const [draggedId, setDraggedId] = useState('');
+  const [dragState, setDragState] = useState(EMPTY_DRAG_STATE);
+  const draggedId = dragState.id;
   const cueSlides = uploads
+    .filter((slide) => Number.isFinite(slide.cueTime))
     .map((slide, index) => ({
       ...slide,
       resolvedCueTime: resolveCueTime(slide, index, uploads.length, trackDuration),
@@ -62,11 +70,18 @@ export function PhotoManagerPanel({
   const draggedSlide = uploads.find((slide) => slide.id === draggedId);
   const isDraggedSlidePinned = Number.isFinite(draggedSlide?.cueTime);
 
+  const handleDragOver = (event) => {
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+  };
+
   const handleCueDrop = (event) => {
     event.preventDefault();
 
     if (!draggedId || !(trackDuration > 0)) {
-      setDraggedId('');
+      setDragState(EMPTY_DRAG_STATE);
       return;
     }
 
@@ -74,7 +89,7 @@ export function PhotoManagerPanel({
     const relativeX = Math.min(Math.max(0, event.clientX - rect.left), rect.width);
     const cueTime = (relativeX / rect.width) * trackDuration;
     setSlideCueTime(draggedId, cueTime, trackDuration);
-    setDraggedId('');
+    setDragState(EMPTY_DRAG_STATE);
   };
 
   return (
@@ -100,32 +115,14 @@ export function PhotoManagerPanel({
               <div className="mb-4 rounded-[1.5rem] border border-white/10 bg-stone-950/40 p-3">
                 <div className="mb-3 flex items-center justify-between gap-3 text-xs uppercase tracking-[0.18em] text-stone-400">
                   <span>Slide Cue Lane</span>
-                  <div className="flex items-center gap-3">
-                    <div
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        if (!draggedId) return;
-                        clearSlideCueTime(draggedId);
-                        setDraggedId('');
-                      }}
-                      className={`rounded-full border px-3 py-1 text-[10px] font-semibold tracking-[0.16em] transition ${
-                        draggedId && isDraggedSlidePinned
-                          ? 'border-rose-400/60 bg-rose-400/10 text-rose-100'
-                          : 'border-white/10 bg-black/30 text-stone-400'
-                      }`}
-                    >
-                      Remove From Timeline
-                    </div>
-                    <span>{formatCueTime(trackDuration)}</span>
-                  </div>
+                  <span>{formatCueTime(trackDuration)}</span>
                 </div>
                 <div
                   className="relative h-24 rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2"
                 >
                   <div
                     className="absolute inset-x-3 bottom-5 top-2"
-                    onDragOver={(event) => event.preventDefault()}
+                    onDragOver={handleDragOver}
                     onDrop={handleCueDrop}
                   >
                     <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-white/10" />
@@ -133,6 +130,11 @@ export function PhotoManagerPanel({
                       className="absolute inset-y-0 w-px bg-orange-300/70"
                       style={{ left: `${playheadPercent}%` }}
                     />
+                    {!cueSlides.length ? (
+                      <div className="absolute inset-0 flex items-center justify-center text-[11px] font-medium uppercase tracking-[0.16em] text-stone-500">
+                        No pinned cues yet
+                      </div>
+                    ) : null}
                     {cueSlides.map((slide) => {
                       const leftPercent = trackDuration > 0 ? (slide.resolvedCueTime / trackDuration) * 100 : 0;
                       const isActive = slide.id === activeSlideId;
@@ -141,8 +143,8 @@ export function PhotoManagerPanel({
                         <div
                           key={`${slide.id}-cue`}
                           draggable
-                          onDragStart={() => setDraggedId(slide.id)}
-                          onDragEnd={() => setDraggedId('')}
+                          onDragStart={() => setDragState({ id: slide.id, source: 'cue' })}
+                          onDragEnd={() => setDragState(EMPTY_DRAG_STATE)}
                           className={`absolute top-0 flex w-14 -translate-x-1/2 cursor-grab flex-col items-center gap-1 ${draggedId === slide.id ? 'opacity-60' : ''}`}
                           style={{ left: `${leftPercent}%` }}
                         >
@@ -161,8 +163,32 @@ export function PhotoManagerPanel({
                     <span>{formatCueTime(trackDuration)}</span>
                   </div>
                 </div>
+                <div
+                  onDragOver={handleDragOver}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    if (!canRemoveCueFromTimeline({
+                      slideId: draggedId,
+                      cueTime: draggedSlide?.cueTime,
+                      draggedId,
+                    })) {
+                      setDragState(EMPTY_DRAG_STATE);
+                      return;
+                    }
+
+                    clearSlideCueTime(draggedId);
+                    setDragState(EMPTY_DRAG_STATE);
+                  }}
+                  className={`mt-3 flex min-h-12 w-full items-center justify-center rounded-2xl border border-dashed px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] transition ${
+                    draggedId && isDraggedSlidePinned
+                      ? 'border-rose-400/70 bg-rose-400/10 text-rose-100'
+                      : 'border-white/10 bg-black/30 text-stone-400'
+                  }`}
+                >
+                  Remove From Timeline
+                </div>
                 <p className="mt-2 text-xs text-stone-400">
-                  Drag a thumbnail onto the cue lane to pin that image to a specific moment in the track. Drag a pinned cue onto Remove From Timeline to send it back to auto timing.
+                  Drag a thumbnail onto the cue lane to pin that image to a specific moment in the track. Drag a pinned cue onto the remove strip to send it back to auto timing.
                 </p>
               </div>
             ) : null}
@@ -175,14 +201,14 @@ export function PhotoManagerPanel({
                 <div
                   key={slide.id}
                   draggable
-                  onDragStart={() => setDraggedId(slide.id)}
-                  onDragOver={(event) => event.preventDefault()}
+                  onDragStart={() => setDragState({ id: slide.id, source: 'grid' })}
+                  onDragOver={handleDragOver}
                   onDrop={(event) => {
                     event.preventDefault();
                     reorderSlides(draggedId, slide.id);
-                    setDraggedId('');
+                    setDragState(EMPTY_DRAG_STATE);
                   }}
-                  onDragEnd={() => setDraggedId('')}
+                  onDragEnd={() => setDragState(EMPTY_DRAG_STATE)}
                   className={`group overflow-hidden rounded-lg border transition ${
                     isActive
                       ? 'border-orange-300/60 bg-orange-300/10'

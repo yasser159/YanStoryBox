@@ -26,6 +26,8 @@
 - [x] Add drag-to-remove support so pinned timeline items can return to auto timing without deleting the media
 - [x] Add a Pin Controls toggle so the lower overlay can stay visible during testing and repeated interactions
 - [x] Implement shared UI state management for the presentation overlay and controls pinning
+- [x] Add reliable explicit removal controls for pinned cue items
+- [x] Add a unit test for cue drag-out removal logic
 
 # Notes
 
@@ -53,6 +55,9 @@
 - Overlay decision: the lower controls tray supports a manual `Pin Controls` toggle so repeated interactions do not depend on hover timing.
 - Upload logging decision: the protected upload picker logs click attempts and file-selection handoff events to the shared diagnostics stream so chooser failures are observable from the console and Diagnostics history.
 - State management decision: shared presentation UI state now lives in a dedicated Zustand store so overlay visibility and pin controls do not stay tangled inside `App.jsx`.
+- Timeline removal decision: pinned cues should be removed through the full-width remove strip below the cue lane.
+- Cue lane display decision: the cue lane should render only manually pinned slides; auto-timed slides belong to playback, not the manual cue board.
+- Testing decision: the cue-clear rule should live in a pure helper so it can be unit tested without dragging fake browser events through the mud.
 
 # Kill List
 
@@ -75,6 +80,14 @@
 - Rejected: treating upload-button fixes as done after build-only validation. Reason: this exact path already failed multiple times without throwing code-level errors, so it needs real browser chooser proof every time.
 - Rejected: hover-only access for repeated overlay interactions. Reason: when users need to click around, a manual pin is more reliable than fighting the hover trigger.
 - Rejected: moving the whole player, audio library, and slide library into one global store. Reason: the real pain point was shared UI coordination, so a tiny store beats a full app-state rewrite.
+- Rejected: forcing users to hit only a tiny remove pill to clear a cue. Reason: the target was too precious and annoying to use.
+- Rejected: trying to unit test native drag events directly inside the React component. Reason: browser drag state is messy; the decision rule belongs in a pure function where tests can actually bite.
+- Rejected: pointing Vitest at the whole `tests/` folder. Reason: Playwright specs and unit specs use different runners, and they start fighting like cousins at a cookout.
+- Rejected: trusting `dragend.dataTransfer.dropEffect` to detect “dragged out of timeline.” Reason: in the real browser that signal was flaky enough to leave cues stuck on the timeline.
+- Rejected: using drag-end pointer geometry as the final fix. Reason: it still leaned on browser drag event quirks; explicit valid-target tracking is cleaner and more reliable.
+- Rejected: relying on drop-zone `dragover` alone to maintain active target state. Reason: if the browser never emits the leave we expect, the lane keeps thinking the cue is still inside.
+- Rejected: drag-out-of-lane as the primary removal contract. Reason: it kept fronting in the real browser; explicit removal targets are easier to use and easier to verify.
+- Rejected: showing auto-timed slides inside the manual cue lane. Reason: it makes “remove from timeline” look broken because the slide still appears there with a fallback time.
 
 # Review
 
@@ -98,6 +111,16 @@
 - Added a `Pin Controls` toggle to keep the lower overlay visible during testing and multi-step interactions.
 - Added structured diagnostics logs for upload-button clicks and file-selection events so the picker path exposes what the browser is doing.
 - Added a small Zustand store for shared overlay visibility and pinning state, with structured diagnostics logs on UI state transitions and less prop-drilling through the player controls.
+- Updated cue dragging so a pinned marker dropped outside valid timeline targets clears its `cueTime` and falls back to auto timing, while thumbnail-grid drags keep their old reorder behavior.
+- Added a Vitest unit test for the cue drag-end decision rule, covering dragged-out pinned cues, grid drags, uncued slides, valid drops, and mismatched slide ids.
+- Reworked cue drag-out removal to track whether the drag is over a valid timeline target, so dropping a cue outside the lane clears it without depending on flaky browser drag metadata.
+- Replaced drag-out removal with an explicit full-width remove strip below the cue lane.
+- Added a small unit-tested helper for whether the dragged cue is actually removable by the explicit remove strip.
+- Fixed the cue lane to render only manually pinned slides, so removing a cue actually makes it leave the lane instead of bouncing to an auto-timed slot.
+- Verification: `npm run test:unit` passed on 2026-03-15 for the cue-timeline drag-out rule after scoping Vitest to `tests/unit`.
+- Verification: `npm run build` passed on 2026-03-15 after extracting the cue drag-end decision into a pure helper.
+- Verification: `npm run test:unit` passed on 2026-03-15 after replacing flaky drag metadata checks with explicit valid-target tracking for cue removal.
+- Verification: `npm run build` passed on 2026-03-15 after the cue-removal bug fix.
 - Verification: `npm run build` passed on 2026-03-14 after introducing the shared Zustand UI store.
 - Verification: `npx playwright test tests/scene-layout.spec.js --grep "visible photo upload button opens a file chooser"` passed on 2026-03-14 after the state-management refactor touched the player controls bar.
 - Verification: Playwright confirmed on 2026-03-14 that dragging a manually pinned cue marker onto `Remove From Timeline` emits `photos.cue_cleared`.
