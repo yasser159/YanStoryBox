@@ -1,7 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useEffect, useRef } from 'react';
 import { UploadPickerButton } from './UploadPickerButton';
-import { usePresentationUiStore } from '../stores/usePresentationUiStore';
 import { logEvent } from '../lib/logger';
 
 function formatTime(totalSeconds) {
@@ -59,10 +58,9 @@ export function PlayerControlsBar({
   onPhotoFilesSelected,
   onAudioFilesSelected,
   isUploadingPhotos = false,
+  isUploadingAudio = false,
   audioMeta,
 }) {
-  const controlsPinned = usePresentationUiStore((state) => state.controlsPinned);
-  const setControlsPinned = usePresentationUiStore((state) => state.setControlsPinned);
   const progress = playerState.duration > 0
     ? Math.min(100, (playerState.currentTime / playerState.duration) * 100)
     : 0;
@@ -79,16 +77,6 @@ export function PlayerControlsBar({
           Track: <span className="font-semibold text-stone-100">{audioMeta?.fileName || 'demo-story.wav'}</span>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-3">
-          <label className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-stone-950/50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-200">
-            <input
-              type="checkbox"
-              checked={controlsPinned}
-              onChange={(event) => setControlsPinned(event.target.checked)}
-              className="h-3.5 w-3.5 accent-orange-400"
-              data-testid="pin-controls-toggle"
-            />
-            Pin Controls
-          </label>
           <span>{formatTime(playerState.currentTime)}</span>
           <span>{formatTime(playerState.duration || 120)}</span>
         </div>
@@ -153,13 +141,19 @@ export function PlayerControlsBar({
         </UploadPickerButton>
         <UploadPickerButton
           accept="audio/*"
+          multiple
+          disabled={isUploadingAudio}
           onFilesSelected={onAudioFilesSelected}
           logPrefix="upload_button.audio"
           buttonTestId="upload-audio-button"
           inputTestId="upload-audio-input"
-          className="inline-flex items-center justify-center rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
+          className={`inline-flex items-center justify-center rounded-full px-4 py-2 text-sm font-semibold transition ${
+            isUploadingAudio
+              ? 'cursor-wait bg-orange-300/80 text-stone-900'
+              : 'bg-orange-400 text-stone-950 hover:bg-orange-300'
+          }`}
         >
-          <span>Upload Audio</span>
+          <span>{isUploadingAudio ? 'Uploading Audio…' : 'Upload Audio'}</span>
         </UploadPickerButton>
       </div>
       <AnimatePresence initial={false}>

@@ -1,16 +1,30 @@
 import { getSlideIndexForTime } from './timeline';
 import { logEvent } from './logger';
 
+function getActiveAudioClip(audioTimeline, currentTime) {
+  return audioTimeline.find((clip) => currentTime >= clip.startTime && currentTime < clip.endTime) || null;
+}
+
+function getNextAudioClip(audioTimeline, currentTime) {
+  return audioTimeline.find((clip) => clip.startTime >= currentTime) || null;
+}
+
 export class StoryPlayer {
-  constructor({ audio, timeline }) {
+  constructor({ audio, timeline, audioTimeline = [], fallbackAudioSrc = '', durationHint = 0 }) {
     this.audio = audio;
     this.timeline = timeline;
+    this.audioTimeline = audioTimeline;
+    this.fallbackAudioSrc = fallbackAudioSrc;
+    this.durationHint = durationHint;
     this.listeners = new Set();
+    this.activeAudioClip = null;
+    this.pendingAudioSync = null;
     this.state = {
       currentTime: 0,
-      duration: audio.duration || 0,
+      duration: durationHint || audio.duration || 0,
       isPlaying: false,
       activeSlideIndex: 0,
+      activeAudioClipId: audioTimeline[0]?.id || '',
       status: 'idle',
       error: '',
     };
@@ -34,7 +48,43 @@ export class StoryPlayer {
     this.setState({ activeSlideIndex });
   }
 
+  updateAudioTimeline(audioTimeline, { fallbackAudioSrc = this.fallbackAudioSrc, durationHint = this.durationHint } = {}) {
+    this.audioTimeline = audioTimeline;
+    this.fallbackAudioSrc = fallbackAudioSrc;
+    this.durationHint = durationHint;
+
+    const nextDuration = durationHint || this.audio.duration || this.state.duration || 0;
+    const activeAudioClip = getActiveAudioClip(this.audioTimeline, this.state.currentTime) || getNextAudioClip(this.audioTimeline, this.state.currentTime);
+
+    logEvent('info', 'player.audio_timeline_updated', {
+      clipCount: this.audioTimeline.length,
+      duration: nextDuration,
+      activeAudioClipId: activeAudioClip?.id || '',
+      currentTime: this.state.currentTime,
+    });
+
+    this.setState({
+      duration: nextDuration,
+      activeAudioClipId: activeAudioClip?.id || '',
+    });
+
+    if (this.audioTimeline.length > 0) {
+      this.syncAudioForTime(this.state.currentTime, { autoplay: this.state.isPlaying });
+      return;
+    }
+
+    if (this.fallbackAudioSrc) {
+      this.audio.src = this.fallbackAudioSrc;
+      this.audio.preload = 'metadata';
+    }
+  }
+
   mount() {
+    if (!this.audioTimeline.length && this.fallbackAudioSrc) {
+      this.audio.src = this.fallbackAudioSrc;
+      this.audio.preload = 'metadata';
+    }
+
     this.audio.addEventListener('loadedmetadata', this.handleLoadedMetadata);
     this.audio.addEventListener('timeupdate', this.handleTimeUpdate);
     this.audio.addEventListener('play', this.handlePlay);
@@ -79,12 +129,63 @@ export class StoryPlayer {
   }
 
   handleLoadedMetadata() {
-    const duration = this.audio.duration || 0;
+    if (this.audioTimeline.length > 0 && this.pendingAudioSync) {
+      const offset = Math.min(
+        Math.max(0, this.pendingAudioSync.offset),
+        Math.max(0, this.audio.duration || this.pendingAudioSync.spanSeconds || this.pendingAudioSync.offset),
+      );
+      this.audio.currentTime = offset;
+      if (this.pendingAudioSync.autoplay) {
+        this.audio.play().catch(() => {});
+      }
+      this.pendingAudioSync = null;
+    }
+
+    const duration = this.audioTimeline.length > 0
+      ? (this.durationHint || this.state.duration || 0)
+      : (this.audio.duration || 0);
     logEvent('info', 'audio.metadata_loaded', { duration });
     this.setState({ duration, status: 'ready' });
   }
 
   handleTimeUpdate() {
+    if (this.audioTimeline.length > 0) {
+      const activeAudioClip = this.activeAudioClip || getActiveAudioClip(this.audioTimeline, this.state.currentTime) || getNextAudioClip(this.audioTimeline, this.state.currentTime);
+
+      if (!activeAudioClip) {
+        if (this.state.isPlaying) {
+          this.handleEnded();
+        }
+        return;
+      }
+
+      const currentTime = Math.min(activeAudioClip.startTime + (this.audio.currentTime || 0), activeAudioClip.endTime);
+      if (currentTime >= activeAudioClip.endTime - 0.05) {
+        const nextAudioClip = getNextAudioClip(this.audioTimeline, activeAudioClip.endTime + 0.001);
+        if (nextAudioClip) {
+          this.syncAudioForTime(nextAudioClip.startTime, { autoplay: this.state.isPlaying, force: true });
+          return;
+        }
+
+        this.setState({
+          currentTime: this.durationHint || activeAudioClip.endTime,
+          activeSlideIndex: getSlideIndexForTime(this.timeline, this.durationHint || activeAudioClip.endTime),
+          activeAudioClipId: '',
+        });
+        if (this.state.isPlaying) {
+          this.handleEnded();
+        }
+        return;
+      }
+
+      this.setState({
+        currentTime,
+        activeSlideIndex: getSlideIndexForTime(this.timeline, currentTime),
+        activeAudioClipId: activeAudioClip.id,
+      });
+      return;
+    }
+
     const currentTime = this.audio.currentTime || 0;
     const activeSlideIndex = getSlideIndexForTime(this.timeline, currentTime);
     this.setState({ currentTime, activeSlideIndex });
@@ -105,8 +206,9 @@ export class StoryPlayer {
     this.setState({
       isPlaying: false,
       status: 'ended',
-      currentTime: this.audio.duration || this.state.currentTime,
+      currentTime: this.durationHint || this.audio.duration || this.state.currentTime,
       activeSlideIndex: this.timeline.length - 1,
+      activeAudioClipId: '',
     });
   }
 
@@ -118,6 +220,11 @@ export class StoryPlayer {
 
   async play() {
     logEvent('info', 'player.play_requested');
+    if (this.audioTimeline.length > 0) {
+      this.syncAudioForTime(this.state.currentTime, { autoplay: true });
+      this.setState({ isPlaying: true, status: 'playing', error: '' });
+      return;
+    }
     try {
       await this.audio.play();
     } catch (error) {
@@ -130,24 +237,32 @@ export class StoryPlayer {
   pause() {
     logEvent('info', 'player.pause_requested');
     this.audio.pause();
+    this.setState({ isPlaying: false, status: 'paused' });
   }
 
   rewind() {
     logEvent('info', 'player.rewind_requested', {
       previousTime: this.audio.currentTime || 0,
     });
-    this.audio.currentTime = 0;
+    if (this.audioTimeline.length > 0) {
+      this.syncAudioForTime(0, { autoplay: false, force: true });
+    } else {
+      this.audio.currentTime = 0;
+    }
     this.setState({
       currentTime: 0,
       activeSlideIndex: 0,
+      activeAudioClipId: this.audioTimeline[0]?.id || '',
       status: this.audio.paused ? 'ready' : this.state.status,
       error: '',
     });
   }
 
   seekBy(deltaSeconds) {
-    const previousTime = this.audio.currentTime || 0;
-    const duration = this.audio.duration || this.state.duration || 0;
+    const previousTime = this.audioTimeline.length > 0
+      ? this.state.currentTime
+      : (this.audio.currentTime || 0);
+    const duration = this.durationHint || this.audio.duration || this.state.duration || 0;
     const nextTime = Math.min(
       Math.max(0, previousTime + deltaSeconds),
       duration > 0 ? duration : previousTime + deltaSeconds,
@@ -162,10 +277,15 @@ export class StoryPlayer {
       activeSlideIndex,
     });
 
-    this.audio.currentTime = nextTime;
+    if (this.audioTimeline.length > 0) {
+      this.syncAudioForTime(nextTime, { autoplay: this.state.isPlaying, force: true });
+    } else {
+      this.audio.currentTime = nextTime;
+    }
     this.setState({
       currentTime: nextTime,
       activeSlideIndex,
+      activeAudioClipId: this.audioTimeline.length > 0 ? (getActiveAudioClip(this.audioTimeline, nextTime)?.id || '') : this.state.activeAudioClipId,
       status: this.audio.paused ? 'ready' : this.state.status,
       error: '',
     });
@@ -186,5 +306,63 @@ export class StoryPlayer {
     }
 
     this.pause();
+  }
+
+  syncAudioForTime(currentTime, { autoplay = false, force = false } = {}) {
+    const activeAudioClip = getActiveAudioClip(this.audioTimeline, currentTime)
+      || (autoplay ? getNextAudioClip(this.audioTimeline, currentTime) : null);
+
+    if (!activeAudioClip) {
+      this.activeAudioClip = null;
+      this.pendingAudioSync = null;
+      this.audio.pause();
+      this.setState({
+        currentTime,
+        activeAudioClipId: '',
+        activeSlideIndex: getSlideIndexForTime(this.timeline, currentTime),
+      });
+      return;
+    }
+
+    const offset = Math.max(0, currentTime - activeAudioClip.startTime);
+    const safeOffset = Math.min(offset, Math.max(0, activeAudioClip.spanSeconds - 0.05));
+
+    logEvent('info', 'player.audio_clip_sync_updated', {
+      clipId: activeAudioClip.id,
+      currentTime,
+      offsetSeconds: safeOffset,
+      autoplay,
+      force,
+    });
+
+    const shouldSwapSrc = force || this.activeAudioClip?.id !== activeAudioClip.id || this.audio.src !== activeAudioClip.src;
+    this.activeAudioClip = activeAudioClip;
+
+    if (shouldSwapSrc) {
+      this.pendingAudioSync = {
+        clipId: activeAudioClip.id,
+        offset: safeOffset,
+        autoplay,
+        spanSeconds: activeAudioClip.spanSeconds,
+      };
+      this.audio.pause();
+      this.audio.src = activeAudioClip.src;
+      this.audio.load();
+    } else {
+      if (Math.abs((this.audio.currentTime || 0) - safeOffset) > 0.35) {
+        this.audio.currentTime = safeOffset;
+      }
+      if (autoplay) {
+        this.audio.play().catch(() => {});
+      } else {
+        this.audio.pause();
+      }
+    }
+
+    this.setState({
+      currentTime,
+      activeAudioClipId: activeAudioClip.id,
+      activeSlideIndex: getSlideIndexForTime(this.timeline, currentTime),
+    });
   }
 }

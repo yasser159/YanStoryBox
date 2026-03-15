@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { useEffect } from 'react';
 import { PhotoManagerPanel } from './components/PhotoManagerPanel';
 import { PlayerControlsBar, StoryPlayerPanel } from './components/StoryPlayerPanel';
 import { useAudioLibrary } from './hooks/useAudioLibrary';
@@ -11,11 +12,22 @@ export default function App() {
   const updateOverlayFromPointer = usePresentationUiStore((state) => state.updateOverlayFromPointer);
   const hideOverlay = usePresentationUiStore((state) => state.hideOverlay);
   const setOverlayPinned = usePresentationUiStore((state) => state.setOverlayPinned);
+  const setPlaybackRunning = usePresentationUiStore((state) => state.setPlaybackRunning);
   const {
     audioSrc,
-    uploadAudioFile,
+    uploadAudioFiles,
     audioError,
     audioMeta,
+    audioClips,
+    audioTimeline,
+    targetDurationSeconds,
+    targetDurationInput,
+    setTargetDurationInput,
+    saveTargetDuration,
+    setAudioClipStartTime,
+    clearAudioClipStartTime,
+    removeAudioClip,
+    isUploadingAudio,
   } = useAudioLibrary();
   const {
     slides,
@@ -39,9 +51,15 @@ export default function App() {
     forwardTenSeconds,
   } = useStoryPlayer({
     audioSrc,
+    audioTimeline,
+    durationHint: audioClips.length ? targetDurationSeconds : 0,
     slides,
   });
   const activeSlide = timeline[playerState.activeSlideIndex] ?? timeline[0];
+
+  useEffect(() => {
+    setPlaybackRunning(playerState.isPlaying);
+  }, [playerState.isPlaying, setPlaybackRunning]);
 
   const handleStagePointerMove = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -57,8 +75,7 @@ export default function App() {
 
   const handleAudioFilesSelected = async (files) => {
     setOverlayPinned(true);
-    const [file] = Array.from(files || []);
-    await uploadAudioFile(file);
+    await uploadAudioFiles(files);
     setOverlayPinned(false);
   };
 
@@ -84,7 +101,7 @@ export default function App() {
                 : 'invisible pointer-events-none'
             }`}
             style={{
-              top: '55dvh',
+              top: 'max(0.75rem, env(safe-area-inset-top))',
               bottom: 'max(0.75rem, env(safe-area-inset-bottom))',
               width: '100%',
             }}
@@ -104,10 +121,17 @@ export default function App() {
                 onPhotoFilesSelected={handlePhotoFilesSelected}
                 onAudioFilesSelected={handleAudioFilesSelected}
                 isUploadingPhotos={isUploadingPhotos}
+                isUploadingAudio={isUploadingAudio}
                 audioMeta={audioMeta}
               />
               <PhotoManagerPanel
                 uploads={uploads}
+                audioClips={audioClips}
+                audioTimeline={audioTimeline}
+                targetDurationSeconds={targetDurationSeconds}
+                targetDurationInput={targetDurationInput}
+                setTargetDurationInput={setTargetDurationInput}
+                saveTargetDuration={saveTargetDuration}
                 activeSlideId={activeSlide?.id}
                 isHydrating={isHydrating}
                 persistenceError={persistenceError}
@@ -115,11 +139,14 @@ export default function App() {
                 setSlideCueTime={setSlideCueTime}
                 clearSlideCueTime={clearSlideCueTime}
                 removeSlide={removeSlide}
+                setAudioClipStartTime={setAudioClipStartTime}
+                clearAudioClipStartTime={clearAudioClipStartTime}
+                removeAudioClip={removeAudioClip}
                 audioError={audioError}
                 trackDuration={playerState.duration}
                 currentTime={playerState.currentTime}
                 embedded
-                className="media-tray h-full min-h-0 overflow-auto"
+                className="media-tray h-full min-h-0"
               />
             </div>
           </motion.div>

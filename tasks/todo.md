@@ -30,6 +30,10 @@
 - [x] Add a unit test for cue drag-out removal logic
 - [x] Add short video support to the visual library, timeline, and scene playback
 - [x] Add video-specific unit tests and a Chromium browser regression for inline scene playback
+- [x] Add a multi-track audio lane with sequential fill and target duration
+- [x] Refactor playback to use composed audio clips while keeping visual timing UI-independent
+- [x] Raise and stick the control/timeline stack so library dragging stays reachable
+- [x] Add unit and browser coverage for audio composition and sticky timeline UX
 
 # Notes
 
@@ -64,6 +68,10 @@
 - Timeline decision: pinned videos occupy explicit spans based on `durationSeconds`, clamped to the next cue start so they do not bulldoze later cues.
 - Thumbnail decision: v1 uses a generic live `<video>` thumb with a play badge instead of blocking uploads on poster extraction; the first-frame poster attempt was not worth hanging the whole picker flow.
 - Browser-test decision: the video playback regression seeds IndexedDB locally instead of mutating shared Firebase presentation data during automated tests.
+- Audio-lane decision: use sequential, non-overlapping clip placement driven by a pure composition builder so playback and UI read the same timing truth.
+- UX decision: keep the control bar outside the scroll area and make the timeline stack sticky above a separately scrolling media library.
+- Playback decision: when custom audio clips exist, the global player clock should drive one active audio element that swaps clip sources and offsets underneath, instead of trying to stitch a fake master file.
+- Persistence decision: audio lane state persists as `targetDurationSeconds`, `audioClips`, and computed `audioTimeline`, with local IndexedDB fallback matching the visual library model.
 
 # Kill List
 
@@ -96,6 +104,9 @@
 - Rejected: showing auto-timed slides inside the manual cue lane. Reason: it makes “remove from timeline” look broken because the slide still appears there with a fallback time.
 - Rejected: blocking video uploads on poster extraction. Reason: the canvas/seek trick hung headless Chromium and could freeze the whole upload path just to chase a pretty thumbnail.
 - Rejected: browser tests that upload videos against shared Firebase state. Reason: tests should not scribble on the shared presentation doc just to prove inline video playback.
+- Rejected: layering multi-track audio directly into UI drag handlers. Reason: the lane needs a pure builder or the playback engine and drop math will start lying to each other.
+- Rejected: using the old single uploaded-audio record as the multi-track store. Reason: one blob in one slot is a toy; the new lane needs a real library plus placements.
+- Rejected: scrolling the whole tray while keeping timelines in normal flow. Reason: that keeps the drop targets running away from the user mid-drag like scared pigeons.
 
 # Review
 
@@ -139,6 +150,15 @@
 - Verification: `npm run test:unit` passed on 2026-03-15 after the short-video support landed.
 - Verification: `npx playwright test tests/scene-layout.spec.js` passed on 2026-03-15 with the seeded short-video regression.
 - Verification: `npm run build` passed on 2026-03-15 after the short-video support landed.
+- Added a pure audio composition module that parses target duration input, auto-fills uploaded clips sequentially, clamps the last clip to the requested duration, and prevents overlap by construction.
+- Replaced the single uploaded soundtrack hook with an audio-lane hook that stores multiple audio clips, persists target duration plus placements, and falls back to IndexedDB when remote audio storage is unavailable.
+- Refactored the player so custom audio playback follows the composed clip lane while the visual timeline continues to run from the same global timebase.
+- Added a dedicated audio lane above the visual cue lane, a target-duration input, an audio library section, and an explicit audio remove strip.
+- Raised the overlay stack and made the timeline region sticky while the library area scrolls independently, so dragging visuals or audio upward no longer fights the scroll position.
+- Added unit coverage for audio composition and a Chromium regression test proving the sticky timeline stack stays visible while the media library scrolls.
+- Verification: `npm run test:unit` passed on 2026-03-15 after the multi-track audio lane landed.
+- Verification: `npx playwright test tests/scene-layout.spec.js` passed on 2026-03-15 after the sticky timeline and audio lane changes.
+- Verification: `npm run build` passed on 2026-03-15 after the multi-track audio lane landed.
 - Verification: `npm run build` passed on 2026-03-14 after introducing the shared Zustand UI store.
 - Verification: `npx playwright test tests/scene-layout.spec.js --grep "visible photo upload button opens a file chooser"` passed on 2026-03-14 after the state-management refactor touched the player controls bar.
 - Verification: Playwright confirmed on 2026-03-14 that dragging a manually pinned cue marker onto `Remove From Timeline` emits `photos.cue_cleared`.

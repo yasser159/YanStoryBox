@@ -2,7 +2,7 @@ import { logEvent } from './logger';
 
 const DB_NAME = 'yan-story-teller';
 const STORE_NAME = 'uploaded-slides';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 function openDatabase() {
   return new Promise((resolve, reject) => {

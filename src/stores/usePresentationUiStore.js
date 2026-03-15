@@ -1,47 +1,120 @@
 import { create } from 'zustand';
 import { logEvent } from '../lib/logger';
 
-const LOWER_OVERLAY_TRIGGER_RATIO = 0.58;
+const PLAYBACK_REVEAL_WINDOW_MS = 4000;
+
+let overlayHideTimer = null;
+
+function clearOverlayHideTimer() {
+  if (overlayHideTimer) {
+    clearTimeout(overlayHideTimer);
+    overlayHideTimer = null;
+  }
+}
+
+function scheduleOverlayHide() {
+  clearOverlayHideTimer();
+  overlayHideTimer = setTimeout(() => {
+    const state = usePresentationUiStore.getState();
+    if (state.overlayPinned || state.controlsPinned || !state.isPlaybackRunning) {
+      return;
+    }
+
+    logUiChange('ui.overlay_hidden', {
+      reason: 'playback_idle_timeout',
+      timeoutMs: PLAYBACK_REVEAL_WINDOW_MS,
+    });
+
+    usePresentationUiStore.setState({ showOverlayControls: false });
+  }, PLAYBACK_REVEAL_WINDOW_MS);
+}
 
 function logUiChange(event, details) {
   logEvent('info', event, details);
 }
 
 export const usePresentationUiStore = create((set, get) => ({
-  showOverlayControls: false,
+  showOverlayControls: true,
   overlayPinned: false,
   controlsPinned: false,
+  isPlaybackRunning: false,
 
   updateOverlayFromPointer(relativeY, height) {
-    const nextValue = height > 0 && relativeY >= height * LOWER_OVERLAY_TRIGGER_RATIO;
-    if (get().showOverlayControls === nextValue) {
+    const state = get();
+    if (!state.isPlaybackRunning) {
+      if (!state.showOverlayControls) {
+        logUiChange('ui.overlay_shown', {
+          reason: 'playback_not_running',
+        });
+        set({ showOverlayControls: true });
+      }
       return;
     }
 
-    logUiChange('ui.overlay_hover_changed', {
-      showOverlayControls: nextValue,
-      relativeY: Math.round(relativeY),
-      height: Math.round(height),
-    });
+    if (!state.showOverlayControls) {
+      logUiChange('ui.overlay_shown', {
+        reason: 'playback_pointer_activity',
+        relativeY: Math.round(relativeY),
+        height: Math.round(height),
+      });
+      set({ showOverlayControls: true });
+    }
 
-    set({ showOverlayControls: nextValue });
+    scheduleOverlayHide();
   },
 
-  hideOverlay() {
+  setPlaybackRunning(nextValue) {
     const state = get();
-    if (state.overlayPinned || state.controlsPinned || !state.showOverlayControls) {
+    if (state.isPlaybackRunning === nextValue) {
+      return;
+    }
+
+    logUiChange('ui.playback_visibility_mode_changed', {
+      isPlaybackRunning: nextValue,
+      controlsPinned: state.controlsPinned,
+      overlayPinned: state.overlayPinned,
+    });
+
+    clearOverlayHideTimer();
+
+    if (!nextValue) {
+      set({
+        isPlaybackRunning: false,
+        showOverlayControls: true,
+      });
+      return;
+    }
+
+    const shouldStayVisible = state.controlsPinned || state.overlayPinned;
+    set({
+      isPlaybackRunning: true,
+      showOverlayControls: shouldStayVisible,
+    });
+
+    if (shouldStayVisible) {
       return;
     }
 
     logUiChange('ui.overlay_hidden', {
-      reason: 'pointer_leave',
+      reason: 'playback_started',
     });
+  },
 
-    set({ showOverlayControls: false });
+  hideOverlay() {
+    const state = get();
+    if (!state.isPlaybackRunning || state.overlayPinned || state.controlsPinned) {
+      if (!state.showOverlayControls) {
+        set({ showOverlayControls: true });
+      }
+      return;
+    }
+
+    scheduleOverlayHide();
   },
 
   setOverlayPinned(nextValue) {
-    if (get().overlayPinned === nextValue) {
+    const state = get();
+    if (state.overlayPinned === nextValue) {
       return;
     }
 
@@ -49,22 +122,39 @@ export const usePresentationUiStore = create((set, get) => ({
       overlayPinned: nextValue,
     });
 
-    set({ overlayPinned: nextValue });
+    clearOverlayHideTimer();
+
+    set({
+      overlayPinned: nextValue,
+      showOverlayControls: nextValue ? true : state.isPlaybackRunning ? state.controlsPinned : true,
+    });
+
+    if (!nextValue && state.isPlaybackRunning && !state.controlsPinned) {
+      scheduleOverlayHide();
+    }
   },
 
   setControlsPinned(nextValue) {
-    if (get().controlsPinned === nextValue) {
+    const state = get();
+    if (state.controlsPinned === nextValue) {
       return;
     }
 
     logUiChange('ui.controls_pin_changed', {
       controlsPinned: nextValue,
+      isPlaybackRunning: state.isPlaybackRunning,
     });
+
+    clearOverlayHideTimer();
 
     set({
       controlsPinned: nextValue,
-      showOverlayControls: nextValue ? true : get().showOverlayControls,
+      showOverlayControls: nextValue ? true : state.isPlaybackRunning ? state.overlayPinned : true,
     });
+
+    if (!nextValue && state.isPlaybackRunning && !state.overlayPinned) {
+      scheduleOverlayHide();
+    }
   },
 }));
 

@@ -8,10 +8,22 @@ const video12Fixture = {
   buffer: readFileSync(path.resolve(process.cwd(), 'tests/fixtures/video-12s.mp4')),
 };
 
+const screenTestFixture = {
+  name: 'screen test.png',
+  mimeType: 'image/png',
+  buffer: readFileSync(path.resolve(process.cwd(), 'src/screen test.png')),
+};
+
+const demoAudioFixture = {
+  name: 'demo-story.wav',
+  mimeType: 'audio/wav',
+  buffer: readFileSync(path.resolve(process.cwd(), 'public/audio/demo-story.wav')),
+};
+
 async function seedLocalVideoSlide(page, { buffer, durationSeconds = 12, cueTime = 0 }) {
   await page.addInitScript(({ bufferBytes, durationSeconds, cueTime }) => {
     window.__seedSlidesPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open('yan-story-teller', 3);
+      const request = indexedDB.open('yan-story-teller', 4);
 
       request.onupgradeneeded = () => {
         const database = request.result;
@@ -64,11 +76,104 @@ async function seedLocalVideoSlide(page, { buffer, durationSeconds = 12, cueTime
   });
 }
 
+async function seedScrollLibrary(page) {
+  await page.addInitScript(({ imageBufferBytes, audioBufferBytes }) => {
+    const imageBlob = new Blob([new Uint8Array(imageBufferBytes)], { type: 'image/png' });
+    const audioBlob = new Blob([new Uint8Array(audioBufferBytes)], { type: 'audio/wav' });
+
+    window.__seedCompositePromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open('yan-story-teller', 4);
+
+      request.onupgradeneeded = () => {
+        const database = request.result;
+        if (!database.objectStoreNames.contains('uploaded-slides')) {
+          database.createObjectStore('uploaded-slides', { keyPath: 'id' });
+        }
+        if (!database.objectStoreNames.contains('uploaded-audio')) {
+          database.createObjectStore('uploaded-audio', { keyPath: 'id' });
+        }
+      };
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const database = request.result;
+        const transaction = database.transaction(['uploaded-slides', 'uploaded-audio'], 'readwrite');
+        const slideStore = transaction.objectStore('uploaded-slides');
+        const audioStore = transaction.objectStore('uploaded-audio');
+
+        transaction.oncomplete = () => {
+          database.close();
+          resolve();
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error);
+        };
+
+        slideStore.clear().onsuccess = () => {
+          for (let index = 0; index < 18; index += 1) {
+            slideStore.put({
+              id: `seed-image-${index}`,
+              title: `seed-image-${index}`,
+              caption: 'Uploaded photo',
+              fileName: `seed-image-${index}.png`,
+              mimeType: 'image/png',
+              createdAt: '2026-03-15T00:00:00.000Z',
+              order: index,
+              mediaType: 'image',
+              durationSeconds: null,
+              posterSrc: '',
+              cueTime: index === 0 ? 8 : null,
+              blob: imageBlob,
+            });
+          }
+        };
+
+        audioStore.clear().onsuccess = () => {
+          audioStore.put({
+            id: 'presentation-audio-lane',
+            targetDurationSeconds: 120,
+            audioClips: [
+              {
+                id: 'seed-audio-1',
+                title: 'seed-audio-1',
+                fileName: 'seed-audio-1.wav',
+                mimeType: 'audio/wav',
+                createdAt: '2026-03-15T00:00:00.000Z',
+                storageMode: 'local',
+                durationSeconds: 24,
+                desiredStartTime: 0,
+                blob: audioBlob,
+              },
+            ],
+            audioTimeline: [
+              {
+                id: 'seed-audio-1',
+                title: 'seed-audio-1',
+                fileName: 'seed-audio-1.wav',
+                mimeType: 'audio/wav',
+                createdAt: '2026-03-15T00:00:00.000Z',
+                storageMode: 'local',
+                durationSeconds: 24,
+                desiredStartTime: 0,
+                startTime: 0,
+                endTime: 24,
+                spanSeconds: 24,
+              },
+            ],
+          });
+        };
+      };
+    });
+  }, {
+    imageBufferBytes: Array.from(screenTestFixture.buffer),
+    audioBufferBytes: Array.from(demoAudioFixture.buffer),
+  });
+}
+
 async function pinControls(page) {
   const viewport = page.viewportSize() || { width: 1400, height: 900 };
-  await page.mouse.move(viewport.width / 2, viewport.height - 80);
-  await expect(page.getByTestId('pin-controls-toggle')).toBeVisible();
-  await page.getByTestId('pin-controls-toggle').check();
+  await page.mouse.move(viewport.width / 2, viewport.height / 2);
   await page.waitForTimeout(150);
 }
 
@@ -190,5 +295,31 @@ test.describe('scene layout', () => {
     expect(metrics.overlay.visibility).toBe('hidden');
     expect(Number(metrics.overlay.opacity)).toBe(0);
     expect(metrics.overlay.bottom).toBeGreaterThan(metrics.overlay.top);
+  });
+
+  test('sticky timelines stay visible while the media library scrolls', async ({ page }) => {
+    await seedScrollLibrary(page);
+    await page.route(/googleapis\.com/, (route) => route.abort());
+    await page.goto('/');
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await pinControls(page);
+
+    const timelineStack = page.getByTestId('timeline-stack');
+    const libraryScroll = page.getByTestId('media-library-scroll');
+    const audioMarker = page.getByTestId('audio-clip-marker-seed-audio-1');
+
+    await expect(audioMarker).toBeVisible();
+
+    const before = await timelineStack.boundingBox();
+    await libraryScroll.evaluate((node) => {
+      node.scrollTop = 1000;
+    });
+    await page.waitForTimeout(200);
+    const after = await timelineStack.boundingBox();
+
+    expect(before).not.toBeNull();
+    expect(after).not.toBeNull();
+    expect(after.y).toBeCloseTo(before.y, 0);
+    await expect(audioMarker).toBeVisible();
   });
 });
