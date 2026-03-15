@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { canRemoveCueFromTimeline } from '../lib/cueRemoval';
 import { formatDurationLabel } from '../lib/audioComposition';
 import { buildCueLaneTimeline } from '../lib/timeline';
@@ -65,6 +65,34 @@ function PlayBadge() {
   );
 }
 
+function AudioWaveform({ peaks }) {
+  const safePeaks = Array.isArray(peaks) && peaks.length ? peaks : [];
+
+  if (!safePeaks.length) {
+    return (
+      <div className="flex h-full items-center">
+        <span className="w-full border-t border-dashed border-cyan-100/35" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full w-full items-end gap-px">
+      {safePeaks.map((peak, index) => {
+        const heightPercent = Math.max(10, Math.round((peak || 0) * 100));
+        return (
+          <span
+            // eslint-disable-next-line react/no-array-index-key
+            key={`wave-${index}`}
+            className="flex-1 rounded-full bg-cyan-100/85"
+            style={{ height: `${heightPercent}%` }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
 function VisualThumb({ slide, className }) {
   if (slide.mediaType === 'video') {
     return (
@@ -112,12 +140,16 @@ export function PhotoManagerPanel({
   audioError,
   trackDuration = 0,
   currentTime = 0,
+  onSeekTimeline,
   className = '',
   style,
   embedded = false,
 }) {
   const [dragState, setDragState] = useState(EMPTY_DRAG_STATE);
+  const [dropHandled, setDropHandled] = useState(false);
   const [durationDraft, setDurationDraft] = useState(targetDurationInput);
+  const [playheadDragging, setPlayheadDragging] = useState(false);
+  const sharedTimelineRef = useRef(null);
   const effectiveDuration = targetDurationSeconds || trackDuration || 0;
   const cueSlides = useMemo(
     () => buildCueLaneTimeline(
@@ -130,10 +162,6 @@ export function PhotoManagerPanel({
   const playheadPercent = effectiveDuration > 0
     ? Math.min(100, Math.max(0, (currentTime / effectiveDuration) * 100))
     : 0;
-  const draggedVisual = uploads.find((slide) => slide.id === dragState.id);
-  const draggedAudioClip = audioClips.find((clip) => clip.id === dragState.id);
-  const isDraggedVisualPinned = Number.isFinite(draggedVisual?.cueTime);
-  const isDraggedAudioPinned = Number.isFinite(draggedAudioClip?.desiredStartTime);
 
   useEffect(() => {
     setDurationDraft(targetDurationInput);
@@ -148,6 +176,38 @@ export function PhotoManagerPanel({
       event.dataTransfer.dropEffect = 'move';
     }
   };
+
+  const seekFromClientX = (clientX) => {
+    if (!(effectiveDuration > 0) || !sharedTimelineRef.current) {
+      return;
+    }
+
+    const rect = sharedTimelineRef.current.getBoundingClientRect();
+    const relativeX = Math.min(Math.max(0, clientX - rect.left), rect.width);
+    onSeekTimeline?.((relativeX / rect.width) * effectiveDuration);
+  };
+
+  useEffect(() => {
+    if (!playheadDragging) {
+      return undefined;
+    }
+
+    const handlePointerMove = (event) => {
+      seekFromClientX(event.clientX);
+    };
+
+    const handlePointerUp = (event) => {
+      seekFromClientX(event.clientX);
+      setPlayheadDragging(false);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [playheadDragging, effectiveDuration, onSeekTimeline]);
 
   return (
     <article className={`${embedded ? 'flex h-full min-h-0 flex-col rounded-[1.5rem] border border-white/10 bg-white/5 p-4 shadow-xl shadow-black/20 backdrop-blur sm:p-5' : 'rounded-[2rem] border border-white/10 bg-white/5 p-6 shadow-2xl shadow-black/20 backdrop-blur'} ${className}`} style={style}>
@@ -173,7 +233,7 @@ export function PhotoManagerPanel({
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="text-xs uppercase tracking-[0.18em] text-stone-400">Audio Lane</p>
-                    <p className="mt-1 text-xs text-stone-500">Upload clips, set the target duration, and the lane fills them sequentially with no overlap.</p>
+                    <p className="mt-1 text-xs text-stone-500">Uploaded audio files sit in the table first. Drag rows onto the lane when you want them in the mix.</p>
                   </div>
                   <form
                     className="flex items-center gap-2"
@@ -197,238 +257,241 @@ export function PhotoManagerPanel({
                     </button>
                   </form>
                 </div>
-                <div className="mb-3 grid h-8 grid-cols-1">
-                  <div className="relative h-full">
-                    {rulerTicks.map((tick) => (
-                      <div
-                        key={`ruler-${tick.value}`}
-                        className="absolute bottom-0 top-0"
-                        style={{ left: `${tick.leftPercent}%` }}
-                      >
-                        <div className="flex h-full -translate-x-1/2 flex-col items-center">
-                          <span className="text-[10px] font-medium text-stone-500">{tick.label}</span>
-                          <span className="mt-1 h-3 w-px bg-white/20" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-                <div className="relative h-20 rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2">
-                  <div
-                    className="absolute inset-x-3 bottom-2 top-2"
-                    onDragOver={(event) => handleDragOver(event, 'audio')}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      if (dragState.kind !== 'audio' || !(effectiveDuration > 0)) {
-                        setDragState(EMPTY_DRAG_STATE);
-                        return;
-                      }
-                      setAudioClipStartTime(dragState.id, clampDropTime(event, effectiveDuration));
-                      setDragState(EMPTY_DRAG_STATE);
-                    }}
-                    data-testid="audio-timeline-lane"
-                  >
-                    <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-white/10" />
-                    <div className="absolute inset-y-0 w-px bg-orange-300/70" style={{ left: `${playheadPercent}%` }} />
-                    {!audioTimeline.length ? (
-                      <div className="absolute inset-0 flex items-center justify-center text-[11px] font-medium uppercase tracking-[0.16em] text-stone-500">
-                        No audio clips pinned yet
-                      </div>
-                    ) : null}
-                    {audioTimeline.map((clip) => {
-                      const leftPercent = effectiveDuration > 0 ? (clip.startTime / effectiveDuration) * 100 : 0;
-                      const width = effectiveDuration > 0
-                        ? `max(4rem, ${(Math.max(clip.spanSeconds, 1) / effectiveDuration) * 100}%)`
-                        : '4rem';
 
-                      return (
-                        <div
-                          key={clip.id}
-                          draggable
-                          onDragStart={() => setDragState({ id: clip.id, source: 'audio-lane', kind: 'audio' })}
-                          onDragEnd={() => setDragState(EMPTY_DRAG_STATE)}
-                          className={`absolute top-0 flex flex-col gap-1 ${dragState.id === clip.id ? 'opacity-60' : ''}`}
-                          style={{ left: `${leftPercent}%`, width }}
-                          data-testid={`audio-clip-marker-${clip.id}`}
-                        >
-                          <div className="overflow-hidden rounded-lg border border-cyan-300/35 bg-cyan-300/15 px-2 py-2 text-xs font-semibold text-cyan-50">
-                            <div className="truncate">{clip.title}</div>
-                            <div className="mt-1 text-[10px] font-medium uppercase tracking-[0.12em] text-cyan-100/75">
-                              {formatDurationLabel(clip.spanSeconds)}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                <div
-                  onDragOver={(event) => handleDragOver(event, 'audio')}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    if (dragState.kind !== 'audio' || !draggedAudioClip || !Number.isFinite(draggedAudioClip.desiredStartTime)) {
-                      setDragState(EMPTY_DRAG_STATE);
-                      return;
-                    }
-                    clearAudioClipStartTime(dragState.id);
-                    setDragState(EMPTY_DRAG_STATE);
-                  }}
-                  className={`mt-3 flex min-h-12 w-full items-center justify-center rounded-2xl border border-dashed px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] transition ${
-                    dragState.kind === 'audio' && isDraggedAudioPinned
-                      ? 'border-cyan-300/70 bg-cyan-300/10 text-cyan-100'
-                      : 'border-white/10 bg-black/30 text-stone-400'
-                  }`}
-                >
-                  Remove Audio From Timeline
-                </div>
-              </div>
-
-              {effectiveDuration > 0 ? (
-                <div className="rounded-[1.5rem] border border-white/10 bg-stone-950/40 p-3">
-                  <div className="mb-3 flex items-center justify-between gap-3 text-xs uppercase tracking-[0.18em] text-stone-400">
-                    <span>Visual Cue Lane</span>
-                    <span>{formatDurationLabel(effectiveDuration)}</span>
-                  </div>
-                  <div className="relative h-24 rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2" data-testid="cue-timeline-shell">
-                    <div
-                      className="absolute inset-x-3 bottom-5 top-2"
-                      onDragOver={(event) => handleDragOver(event, 'visual')}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        if (dragState.kind !== 'visual' || !(effectiveDuration > 0)) {
-                          setDragState(EMPTY_DRAG_STATE);
-                          return;
-                        }
-                        setSlideCueTime(dragState.id, clampDropTime(event, effectiveDuration), effectiveDuration);
-                        setDragState(EMPTY_DRAG_STATE);
-                      }}
-                      data-testid="cue-timeline-lane"
-                    >
-                      <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-white/10" />
-                      <div className="absolute inset-y-0 w-px bg-orange-300/70" style={{ left: `${playheadPercent}%` }} />
-                      {!cueSlides.length ? (
-                        <div className="absolute inset-0 flex items-center justify-center text-[11px] font-medium uppercase tracking-[0.16em] text-stone-500">
-                          No pinned cues yet
-                        </div>
-                      ) : null}
-                      {cueSlides.map((slide) => {
-                        const leftPercent = effectiveDuration > 0 ? (slide.startTime / effectiveDuration) * 100 : 0;
-                        const isActive = slide.id === activeSlideId;
-                        const isVideo = slide.mediaType === 'video';
-                        const blockWidth = isVideo && effectiveDuration > 0
-                          ? `max(4.5rem, ${(Math.max(slide.spanSeconds || slide.durationSeconds || 1, 1) / effectiveDuration) * 100}%)`
-                          : '3.5rem';
-
+                {audioClips.length ? (
+                  <div className="mb-4 overflow-hidden rounded-2xl border border-white/10 bg-black/25">
+                    <div className="grid grid-cols-[minmax(0,1fr)_7rem] border-b border-white/10 bg-white/5 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-stone-400">
+                      <span>File Name</span>
+                      <span>Duration</span>
+                    </div>
+                    <div className="max-h-44 overflow-auto">
+                      {audioClips.map((clip) => {
+                        const isPinned = Number.isFinite(clip.desiredStartTime);
                         return (
                           <div
-                            key={`${slide.id}-cue`}
+                            key={clip.id}
                             draggable
-                            onDragStart={() => setDragState({ id: slide.id, source: 'cue', kind: 'visual' })}
-                            onDragEnd={() => setDragState(EMPTY_DRAG_STATE)}
-                            data-testid={`cue-marker-${slide.id}`}
-                            className={`absolute top-0 flex cursor-grab flex-col items-center gap-1 ${dragState.id === slide.id ? 'opacity-60' : ''} ${isVideo ? '' : '-translate-x-1/2'}`}
-                            style={{
-                              left: `${leftPercent}%`,
-                              width: blockWidth,
-                              maxWidth: isVideo ? `calc(100% - ${leftPercent}%)` : undefined,
+                            onDragStart={() => {
+                              setDropHandled(false);
+                              setDragState({ id: clip.id, source: 'audio-library', kind: 'audio' });
                             }}
+                            onDragEnd={() => setDragState(EMPTY_DRAG_STATE)}
+                            className={`grid cursor-grab grid-cols-[minmax(0,1fr)_7rem] items-center gap-3 border-t border-white/5 px-4 py-3 text-sm transition first:border-t-0 ${isPinned ? 'bg-cyan-300/10 text-cyan-50' : 'text-stone-100'} ${dragState.id === clip.id ? 'opacity-60' : ''}`}
+                            data-testid={`audio-library-clip-${clip.id}`}
                           >
-                            <div className={`relative overflow-hidden rounded-lg border ${isActive ? 'border-orange-300/70' : 'border-white/15'} ${isVideo ? 'w-full' : ''}`}>
-                              <VisualThumb
-                                slide={slide}
-                                className={isVideo ? 'h-10 w-full object-cover' : 'h-10 w-10 object-cover'}
-                              />
-                            </div>
-                            <div className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${isActive ? 'bg-orange-300 text-stone-950' : 'bg-black/70 text-stone-100'}`}>
-                              {formatDurationLabel(slide.startTime)}
-                            </div>
+                            <span className="truncate font-medium">{clip.fileName}</span>
+                            <span className="text-xs font-semibold uppercase tracking-[0.14em] text-stone-400">
+                              {formatDurationLabel(clip.durationSeconds || 0)}
+                            </span>
                           </div>
                         );
                       })}
                     </div>
-                    <div className="absolute inset-x-3 bottom-1 flex justify-between text-[10px] font-medium uppercase tracking-[0.16em] text-stone-500">
-                      <span>00:00</span>
-                      <span>{formatDurationLabel(effectiveDuration)}</span>
+                  </div>
+                ) : null}
+
+                <div className="relative" ref={sharedTimelineRef} data-testid="shared-playhead-shell">
+                  <div className="mb-3 grid h-8 grid-cols-1">
+                    <div className="relative h-full">
+                      {rulerTicks.map((tick) => (
+                        <div
+                          key={`ruler-${tick.value}`}
+                          className="absolute bottom-0 top-0"
+                          style={{ left: `${tick.leftPercent}%` }}
+                        >
+                          <div className="flex h-full -translate-x-1/2 flex-col items-center">
+                            <span className="text-[10px] font-medium text-stone-500">{tick.label}</span>
+                            <span className="mt-1 h-3 w-px bg-white/20" />
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <div
-                    onDragOver={(event) => handleDragOver(event, 'visual')}
-                    onDrop={(event) => {
-                      event.preventDefault();
-                      if (
-                        dragState.kind !== 'visual'
-                        || !canRemoveCueFromTimeline({
-                          slideId: dragState.id,
-                          cueTime: draggedVisual?.cueTime,
-                          draggedId: dragState.id,
-                        })
-                      ) {
-                        setDragState(EMPTY_DRAG_STATE);
-                        return;
-                      }
 
-                      clearSlideCueTime(dragState.id);
-                      setDragState(EMPTY_DRAG_STATE);
-                    }}
-                    data-testid="remove-from-timeline"
-                    className={`mt-3 flex min-h-12 w-full items-center justify-center rounded-2xl border border-dashed px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] transition ${
-                      dragState.kind === 'visual' && isDraggedVisualPinned
-                        ? 'border-rose-400/70 bg-rose-400/10 text-rose-100'
-                        : 'border-white/10 bg-black/30 text-stone-400'
-                    }`}
-                  >
-                    Remove Visual From Timeline
+                  <div className="relative space-y-4">
+                    <div className="relative h-20 rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2">
+                      <div
+                        className="absolute inset-x-3 bottom-2 top-2"
+                        onClick={(event) => {
+                          if (dragState.kind || playheadDragging) return;
+                          seekFromClientX(event.clientX);
+                        }}
+                        onDragOver={(event) => handleDragOver(event, 'audio')}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          if (dragState.kind !== 'audio' || !(effectiveDuration > 0)) {
+                            setDropHandled(false);
+                            setDragState(EMPTY_DRAG_STATE);
+                            return;
+                          }
+                          setDropHandled(true);
+                          setAudioClipStartTime(dragState.id, clampDropTime(event, effectiveDuration));
+                          setDragState(EMPTY_DRAG_STATE);
+                        }}
+                        data-testid="audio-timeline-lane"
+                      >
+                        <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-white/10" />
+                        {!audioTimeline.length ? (
+                          <div className="absolute inset-0 flex items-center justify-center text-[11px] font-medium uppercase tracking-[0.16em] text-stone-500">
+                            No audio clips pinned yet
+                          </div>
+                        ) : null}
+                        {audioTimeline.map((clip) => {
+                          const leftPercent = effectiveDuration > 0 ? (clip.startTime / effectiveDuration) * 100 : 0;
+                          const width = effectiveDuration > 0
+                            ? `max(5rem, ${(Math.max(clip.spanSeconds, 1) / effectiveDuration) * 100}%)`
+                            : '5rem';
+
+                          return (
+                            <div
+                              key={clip.id}
+                              draggable
+                              onDragStart={() => {
+                                setDropHandled(false);
+                                setDragState({ id: clip.id, source: 'audio-lane', kind: 'audio' });
+                              }}
+                              onDragEnd={() => {
+                                const shouldRemoveFromTimeline = !dropHandled && Number.isFinite(clip.desiredStartTime);
+                                setDragState(EMPTY_DRAG_STATE);
+                                setDropHandled(false);
+                                if (shouldRemoveFromTimeline) {
+                                  clearAudioClipStartTime(clip.id);
+                                }
+                              }}
+                              className={`absolute top-0 flex h-full flex-col gap-1 ${dragState.id === clip.id ? 'opacity-60' : ''}`}
+                              style={{ left: `${leftPercent}%`, width }}
+                              data-testid={`audio-clip-marker-${clip.id}`}
+                            >
+                              <div className="flex h-full flex-col overflow-hidden rounded-xl border border-cyan-200/60 bg-gradient-to-b from-cyan-300/20 via-cyan-300/12 to-cyan-400/10 px-2 py-2 text-xs font-semibold text-cyan-50 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]">
+                                <div className="flex items-center gap-1.5 truncate">
+                                  <span className="shrink-0" aria-hidden="true">🎵</span>
+                                  <span className="truncate">{clip.title}</span>
+                                </div>
+                                <div className="mt-2 min-h-0 flex-1">
+                                  <AudioWaveform peaks={clip.waveformPeaks} />
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {effectiveDuration > 0 ? (
+                      <div className="rounded-[1.5rem] border border-white/10 bg-stone-950/40 p-3">
+                        <div className="relative h-24 rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2" data-testid="cue-timeline-shell">
+                          <div
+                            className="absolute inset-x-3 bottom-5 top-2"
+                            onClick={(event) => {
+                              if (dragState.kind || playheadDragging) return;
+                              seekFromClientX(event.clientX);
+                            }}
+                            onDragOver={(event) => handleDragOver(event, 'visual')}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              if (dragState.kind !== 'visual' || !(effectiveDuration > 0)) {
+                                setDropHandled(false);
+                                setDragState(EMPTY_DRAG_STATE);
+                                return;
+                              }
+                              setDropHandled(true);
+                              setSlideCueTime(dragState.id, clampDropTime(event, effectiveDuration), effectiveDuration);
+                              setDragState(EMPTY_DRAG_STATE);
+                            }}
+                            data-testid="cue-timeline-lane"
+                          >
+                            <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-white/10" />
+                            {!cueSlides.length ? (
+                              <div className="absolute inset-0 flex items-center justify-center text-[11px] font-medium uppercase tracking-[0.16em] text-stone-500">
+                                No pinned cues yet
+                              </div>
+                            ) : null}
+                            {cueSlides.map((slide) => {
+                              const leftPercent = effectiveDuration > 0 ? (slide.startTime / effectiveDuration) * 100 : 0;
+                              const isActive = slide.id === activeSlideId;
+                              const isVideo = slide.mediaType === 'video';
+                              const blockWidth = isVideo && effectiveDuration > 0
+                                ? `max(4.5rem, ${(Math.max(slide.spanSeconds || slide.durationSeconds || 1, 1) / effectiveDuration) * 100}%)`
+                                : '3.5rem';
+
+                              return (
+                                <div
+                                  key={`${slide.id}-cue`}
+                                  draggable
+                                  onDragStart={() => {
+                                    setDropHandled(false);
+                                    setDragState({ id: slide.id, source: 'cue', kind: 'visual' });
+                                  }}
+                                  onDragEnd={() => {
+                                    const shouldRemoveFromTimeline = !dropHandled && canRemoveCueFromTimeline({
+                                      slideId: slide.id,
+                                      cueTime: slide.cueTime,
+                                      draggedId: slide.id,
+                                    });
+                                    setDragState(EMPTY_DRAG_STATE);
+                                    setDropHandled(false);
+                                    if (shouldRemoveFromTimeline) {
+                                      clearSlideCueTime(slide.id);
+                                    }
+                                  }}
+                                  data-testid={`cue-marker-${slide.id}`}
+                                  className={`absolute top-0 flex cursor-grab flex-col items-center gap-1 ${dragState.id === slide.id ? 'opacity-60' : ''} ${isVideo ? '' : '-translate-x-1/2'}`}
+                                  style={{
+                                    left: `${leftPercent}%`,
+                                    width: blockWidth,
+                                    maxWidth: isVideo ? `calc(100% - ${leftPercent}%)` : undefined,
+                                  }}
+                                >
+                                  <div className={`relative overflow-hidden rounded-lg border ${isActive ? 'border-orange-300/70' : 'border-white/15'} ${isVideo ? 'w-full' : ''}`}>
+                                    <VisualThumb
+                                      slide={slide}
+                                      className={isVideo ? 'h-10 w-full object-cover' : 'h-10 w-10 object-cover'}
+                                    />
+                                  </div>
+                                  <div className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${isActive ? 'bg-orange-300 text-stone-950' : 'bg-black/70 text-stone-100'}`}>
+                                    {formatDurationLabel(slide.startTime)}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <div className="absolute inset-x-3 bottom-1 flex justify-between text-[10px] font-medium uppercase tracking-[0.16em] text-stone-500">
+                            <span>00:00</span>
+                            <span>{formatDurationLabel(effectiveDuration)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {effectiveDuration > 0 ? (
+                      <div
+                        className="pointer-events-none absolute inset-y-0 z-20 -translate-x-1/2"
+                        style={{ left: `${playheadPercent}%` }}
+                        data-testid="shared-playhead"
+                      >
+                        <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-orange-300 shadow-[0_0_18px_rgba(251,146,60,0.45)]" />
+                        <button
+                          type="button"
+                          onPointerDown={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            setPlayheadDragging(true);
+                            seekFromClientX(event.clientX);
+                          }}
+                          className="pointer-events-auto absolute left-1/2 top-[calc(5rem+0.5rem)] flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize items-center justify-center rounded-full border border-orange-100/80 bg-orange-300 text-stone-950 shadow-lg shadow-orange-300/30"
+                          aria-label="Drag timeline read head"
+                          data-testid="shared-playhead-handle"
+                        >
+                          <span className="h-3.5 w-0.5 rounded-full bg-stone-950/70" />
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
-              ) : null}
+              </div>
             </div>
 
             <div className="mt-2 min-h-0 flex-1 overflow-auto pr-1" data-testid="media-library-scroll">
-              {audioClips.length ? (
-                <section className="mb-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.18em] text-stone-400">Audio Library</p>
-                      <p className="mt-1 text-xs text-stone-500">Drag audio clips onto the audio lane. If they’re already there, drag them again to reposition.</p>
-                    </div>
-                    <div className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-stone-300">
-                      {audioClips.length} clip{audioClips.length === 1 ? '' : 's'}
-                    </div>
-                  </div>
-                  <div className="grid gap-2">
-                    {audioClips.map((clip) => {
-                      const isPinned = Number.isFinite(clip.desiredStartTime);
-
-                      return (
-                        <div
-                          key={clip.id}
-                          draggable
-                          onDragStart={() => setDragState({ id: clip.id, source: 'audio-library', kind: 'audio' })}
-                          onDragEnd={() => setDragState(EMPTY_DRAG_STATE)}
-                          className={`flex cursor-grab items-center justify-between gap-3 rounded-2xl border px-4 py-3 transition ${isPinned ? 'border-cyan-300/30 bg-cyan-300/10' : 'border-white/10 bg-stone-950/40'} ${dragState.id === clip.id ? 'opacity-60' : ''}`}
-                          data-testid={`audio-library-clip-${clip.id}`}
-                        >
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-stone-100">{clip.title}</p>
-                            <p className="mt-1 text-xs uppercase tracking-[0.14em] text-stone-400">
-                              {formatDurationLabel(clip.durationSeconds || 0)} • {isPinned ? `Pinned at ${formatDurationLabel(clip.desiredStartTime)}` : 'Unpinned'}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => removeAudioClip(clip.id)}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/60 text-xs font-semibold text-stone-100 transition hover:bg-rose-500"
-                            aria-label={`Remove ${clip.title}`}
-                          >
-                            X
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              ) : null}
-
               {uploads.length ? (
                 <section>
                   <div className="mb-3">
@@ -444,49 +507,45 @@ export function PhotoManagerPanel({
                         <div
                           key={slide.id}
                           draggable
-                          onDragStart={() => setDragState({ id: slide.id, source: 'grid', kind: 'visual' })}
-                          onDragOver={(event) => handleDragOver(event, 'visual')}
-                          onDrop={(event) => {
+                          onDragStart={() => setDragState({ id: slide.id, source: 'library', kind: 'visual' })}
+                          onDragEnd={() => setDragState(EMPTY_DRAG_STATE)}
+                          onDragOver={(event) => {
+                            if (dragState.kind !== 'visual' || dragState.source === 'cue') return;
                             event.preventDefault();
-                            if (dragState.kind !== 'visual') {
-                              setDragState(EMPTY_DRAG_STATE);
-                              return;
+                            if (event.dataTransfer) {
+                              event.dataTransfer.dropEffect = 'move';
                             }
+                          }}
+                          onDrop={(event) => {
+                            if (dragState.kind !== 'visual' || dragState.source === 'cue') return;
+                            event.preventDefault();
                             reorderSlides(dragState.id, slide.id);
                             setDragState(EMPTY_DRAG_STATE);
                           }}
-                          onDragEnd={() => setDragState(EMPTY_DRAG_STATE)}
                           data-testid={`visual-thumb-${slide.id}`}
-                          className={`group overflow-hidden rounded-lg border transition ${
-                            isActive
-                              ? 'border-orange-300/60 bg-orange-300/10'
-                              : 'border-white/10 bg-stone-950/40'
-                          } ${isDragging ? 'scale-[0.98] opacity-70' : ''}`}
+                          className={`group relative overflow-hidden rounded-[1.25rem] border transition ${isActive ? 'border-orange-300/80 shadow-[0_0_0_1px_rgba(251,146,60,0.4)]' : 'border-white/10'} ${isDragging ? 'opacity-60' : ''}`}
                         >
-                          <div className="relative">
-                            <VisualThumb slide={slide} className="aspect-square w-full object-cover" />
-                            <div className="absolute left-1 top-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-stone-100">
-                              #{index + 1}
-                            </div>
-                            {slide.mediaType === 'video' ? (
-                              <div className="absolute right-1 bottom-1 rounded-full bg-black/75 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.15em] text-stone-100">
-                                {Math.round(slide.durationSeconds || 0)}s
-                              </div>
-                            ) : null}
-                            <button
-                              type="button"
-                              onClick={() => removeSlide(slide.id)}
-                              className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-[11px] font-semibold text-stone-100 opacity-0 transition hover:bg-rose-500 group-hover:opacity-100"
-                              aria-label={`Remove ${slide.title}`}
-                            >
-                              X
-                            </button>
-                            {isActive ? (
-                              <div className="absolute bottom-1 right-1 rounded-full bg-orange-300 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.15em] text-stone-950">
-                                Live
-                              </div>
+                          <div className="aspect-square bg-black/25">
+                            <VisualThumb slide={slide} className="h-full w-full object-cover" />
+                          </div>
+                          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent p-2">
+                            <p className="truncate text-xs font-medium text-stone-100">
+                              {index + 1}. {slide.title}
+                            </p>
+                            {slide.mediaType === 'video' && Number.isFinite(slide.durationSeconds) ? (
+                              <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-stone-300">
+                                {formatDurationLabel(slide.durationSeconds)}
+                              </p>
                             ) : null}
                           </div>
+                          <button
+                            type="button"
+                            onClick={() => removeSlide(slide.id)}
+                            className="absolute right-2 top-2 inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-xs font-semibold text-stone-100 opacity-0 transition hover:bg-rose-500 group-hover:opacity-100"
+                            aria-label={`Remove ${slide.title}`}
+                          >
+                            X
+                          </button>
                         </div>
                       );
                     })}

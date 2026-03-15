@@ -1,5 +1,9 @@
 # Task Plan
 
+- [x] Inspect the shared read-head and timeline interaction surfaces
+- [x] Move read-head dragging to a dedicated middle-gap handle and stop lane drag hijacking
+- [x] Remove the visual lane title and verify click-to-seek plus handle-drag behavior
+
 - [x] Review current React app for functional bugs and regressions
 - [x] Verify suspect UI/core interactions in slide, audio, and player flows
 - [x] Run build and automated browser checks to confirm findings
@@ -107,6 +111,12 @@
 - Rejected: layering multi-track audio directly into UI drag handlers. Reason: the lane needs a pure builder or the playback engine and drop math will start lying to each other.
 - Rejected: using the old single uploaded-audio record as the multi-track store. Reason: one blob in one slot is a toy; the new lane needs a real library plus placements.
 - Rejected: scrolling the whole tray while keeping timelines in normal flow. Reason: that keeps the drop targets running away from the user mid-drag like scared pigeons.
+- Rejected: separate upload buttons for visuals and audio after the lane expansion. Reason: one mixed-media upload control is cleaner and the routing belongs in the app shell, not in duplicated picker UI.
+- Rejected: auto-placing audio clips on upload once the audio table exists. Reason: the user wants table-first control, then manual drag onto the lane when the clip actually belongs there.
+- Rejected: fake waveform bars. Reason: once the audio lane is a real editing surface, decorative bars are just lying with confidence.
+- Rejected: driving the multi-clip audio lane purely from the HTML audio element clock. Reason: gaps between clips and manual placement need a global composition clock, or playback starts lying about time.
+- Rejected: a tiny playhead handle as the primary transport affordance. Reason: with two timelines stacked, the read head needs to read like one tall needle, not a little orange thumbtack.
+- Rejected: making the whole lane surface a read-head drag target. Reason: that setup keeps hijacking timeline-item drags like a sticky-fingered bartender grabbing the wrong tab.
 
 # Review
 
@@ -159,6 +169,25 @@
 - Verification: `npm run test:unit` passed on 2026-03-15 after the multi-track audio lane landed.
 - Verification: `npx playwright test tests/scene-layout.spec.js` passed on 2026-03-15 after the sticky timeline and audio lane changes.
 - Verification: `npm run build` passed on 2026-03-15 after the multi-track audio lane landed.
+- Reworked the controls bar to use one `Upload Media` button that accepts images, videos, and audio, then routes them by MIME type in the app shell.
+- Reworked the audio lane UX so uploaded audio files land in a table above the lane with file name and duration, and are only placed on the lane when dragged there manually.
+- Added real waveform peak extraction in the audio core, persisted waveform data with audio clips, and rendered waveform blocks for placed clips instead of flat duration pills.
+- Added a single shared playhead spanning the audio and visual timelines, with click/drag seeking on both lanes and live playback movement from the same global time.
+- Removed the visible audio and visual remove strips from the timeline UI while keeping drag-out unpin behavior intact.
+- Verification: `npm run test:unit` passed on 2026-03-15 after waveform peak extraction and manual audio placement changes.
+- Verification: `npx playwright test tests/scene-layout.spec.js` passed on 2026-03-15 after the unified upload button, shared playhead, and audio table changes.
+- Verification: `npm run build` passed on 2026-03-15 after the unified upload button, waveform rendering, and shared playhead changes.
+- Fixed the audio lane playback bug by moving composed playback onto a global player clock instead of relying on the active audio element for timeline time.
+- Hardened audio metadata extraction so uploads fail when waveform decoding fails, instead of silently faking waveform visuals.
+- Reworked the shared playhead into one tall vertical read-head line spanning both timelines, with drag/click seeking from either lane.
+- Moved read-head dragging onto a dedicated middle-gap handle, removed the `Visual Cue Lane` title, and changed the lane surfaces back to click-to-seek so audio and visual blocks keep their own drag gestures.
+- Added diagnostics for uploaded-but-unplaced audio, active clip selection, source swaps, and composed clip playback events.
+- Added a Chromium regression proving a placed audio clip actually advances the underlying audio element during playback.
+- Verification: `npm run test:unit` passed on 2026-03-15 after the composed audio clock refactor.
+- Verification: `npx playwright test tests/scene-layout.spec.js` passed on 2026-03-15 after the audio playback and large read-head fixes.
+- Verification: `npm run build` passed on 2026-03-15 after the audio playback and large read-head fixes.
+- Verification: `npx playwright test tests/scene-layout.spec.js --grep "shared playhead"` passed on 2026-03-15 after moving the read-head drag handle into the middle gap.
+- Verification: `npm run build` passed on 2026-03-15 after removing the visual lane label and lane-level read-head drag starts.
 - Verification: `npm run build` passed on 2026-03-14 after introducing the shared Zustand UI store.
 - Verification: `npx playwright test tests/scene-layout.spec.js --grep "visible photo upload button opens a file chooser"` passed on 2026-03-14 after the state-management refactor touched the player controls bar.
 - Verification: Playwright confirmed on 2026-03-14 that dragging a manually pinned cue marker onto `Remove From Timeline` emits `photos.cue_cleared`.

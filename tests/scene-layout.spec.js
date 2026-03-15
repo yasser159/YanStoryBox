@@ -142,6 +142,7 @@ async function seedScrollLibrary(page) {
                 createdAt: '2026-03-15T00:00:00.000Z',
                 storageMode: 'local',
                 durationSeconds: 24,
+                waveformPeaks: Array.from({ length: 32 }, (_, index) => (index % 2 ? 0.35 : 0.8)),
                 desiredStartTime: 0,
                 blob: audioBlob,
               },
@@ -159,6 +160,7 @@ async function seedScrollLibrary(page) {
                 startTime: 0,
                 endTime: 24,
                 spanSeconds: 24,
+                waveformPeaks: Array.from({ length: 32 }, (_, index) => (index % 2 ? 0.35 : 0.8)),
               },
             ],
           });
@@ -238,22 +240,22 @@ test.describe('scene layout', () => {
     const cueWidth = await cueMarker.evaluate((node) => node.getBoundingClientRect().width);
     expect(cueWidth).toBeGreaterThan(80);
 
-    await page.getByLabel('Play').click();
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
     await page.waitForTimeout(1800);
 
     const currentTime = await page.getByTestId('scene-active-video').evaluate((node) => node.currentTime);
     expect(currentTime).toBeGreaterThan(0.5);
   });
 
-  test('visible photo upload button opens a file chooser', async ({ page }) => {
+  test('visible media upload button opens a file chooser', async ({ page }) => {
     await page.goto('/');
     await page.setViewportSize({ width: 1400, height: 900 });
-    await page.mouse.move(700, 760);
-    await expect(page.getByTestId('upload-photos-button')).toBeVisible();
+    await page.mouse.move(700, 300);
+    await expect(page.getByTestId('upload-media-button')).toBeVisible();
 
     const [chooser] = await Promise.all([
       page.waitForEvent('filechooser'),
-      page.getByTestId('upload-photos-button').click(),
+      page.getByTestId('upload-media-button').click(),
     ]);
 
     expect(chooser.isMultiple()).toBeTruthy();
@@ -285,16 +287,15 @@ test.describe('scene layout', () => {
     }
   });
 
-  test('hidden overlay stays offscreen when not hovered', async ({ page }) => {
+  test('controls stay visible while playback is not running', async ({ page }) => {
     await page.goto('/');
     await page.setViewportSize({ width: 1400, height: 900 });
     await page.waitForTimeout(300);
 
     const metrics = await readSceneMetrics(page);
     expect(metrics).not.toBeNull();
-    expect(metrics.overlay.visibility).toBe('hidden');
-    expect(Number(metrics.overlay.opacity)).toBe(0);
-    expect(metrics.overlay.bottom).toBeGreaterThan(metrics.overlay.top);
+    expect(metrics.overlay.visibility).toBe('visible');
+    expect(Number(metrics.overlay.opacity)).toBeGreaterThan(0.9);
   });
 
   test('sticky timelines stay visible while the media library scrolls', async ({ page }) => {
@@ -321,5 +322,75 @@ test.describe('scene layout', () => {
     expect(after).not.toBeNull();
     expect(after.y).toBeCloseTo(before.y, 0);
     await expect(audioMarker).toBeVisible();
+  });
+
+  test('shared playhead seeks from the visual timeline', async ({ page }) => {
+    await seedScrollLibrary(page);
+    await page.route(/googleapis\.com/, (route) => route.abort());
+    await page.goto('/');
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await pinControls(page);
+
+    const cueLane = page.getByTestId('cue-timeline-lane');
+    const playhead = page.getByTestId('shared-playhead');
+    const before = await playhead.boundingBox();
+    const laneBox = await cueLane.boundingBox();
+
+    expect(laneBox).not.toBeNull();
+    await page.mouse.click(laneBox.x + (laneBox.width * 0.7), laneBox.y + (laneBox.height / 2));
+    await page.waitForTimeout(200);
+
+    const after = await playhead.boundingBox();
+    expect(before).not.toBeNull();
+    expect(after).not.toBeNull();
+    expect(after.x).toBeGreaterThan(before.x + 40);
+  });
+
+  test('shared playhead drags from the middle handle and visual lane label stays clean', async ({ page }) => {
+    await seedScrollLibrary(page);
+    await page.route(/googleapis\.com/, (route) => route.abort());
+    await page.goto('/');
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await pinControls(page);
+
+    await expect(page.getByText('Visual Cue Lane')).toHaveCount(0);
+
+    const handle = page.getByTestId('shared-playhead-handle');
+    const before = await page.getByTestId('shared-playhead').boundingBox();
+    const box = await handle.boundingBox();
+
+    expect(box).not.toBeNull();
+    await page.mouse.move(box.x + (box.width / 2), box.y + (box.height / 2));
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width + 220, box.y + (box.height / 2), { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(200);
+
+    const after = await page.getByTestId('shared-playhead').boundingBox();
+    expect(before).not.toBeNull();
+    expect(after).not.toBeNull();
+    expect(after.x).toBeGreaterThan(before.x + 100);
+  });
+
+  test('placed audio clip drives playback when the lane is playing', async ({ page }) => {
+    await seedScrollLibrary(page);
+    await page.route(/googleapis\.com/, (route) => route.abort());
+    await page.goto('/');
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await pinControls(page);
+
+    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    await page.waitForTimeout(1800);
+
+    const audioState = await page.evaluate(() => {
+      const audio = document.querySelector('audio');
+      return {
+        currentTime: audio?.currentTime || 0,
+        paused: audio?.paused ?? true,
+      };
+    });
+
+    expect(audioState.paused).toBeFalsy();
+    expect(audioState.currentTime).toBeGreaterThan(0.4);
   });
 });
