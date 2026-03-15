@@ -6,18 +6,22 @@ function clampCueTime(cueTime, duration) {
   return Math.min(Math.max(0, cueTime), duration);
 }
 
-export function buildTimeline(slides, duration) {
-  if (!Array.isArray(slides) || slides.length === 0) {
-    logEvent('warn', 'timeline.empty_slides', { duration });
-    return [];
-  }
+function clampVideoEndTime(startTime, durationSeconds, nextStartTime, safeDuration) {
+  const nominalEnd = startTime + (Number.isFinite(durationSeconds) ? durationSeconds : 0);
+  const boundedEnd = safeDuration > 0 ? Math.min(nominalEnd, safeDuration) : nominalEnd;
+  return Math.min(boundedEnd, nextStartTime);
+}
 
+function buildTimelineItems(slides, duration, { emitLogs }) {
   const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
   const segment = safeDuration > 0 ? safeDuration / slides.length : 0;
   const normalizedSlides = slides
     .map((slide, index) => ({
       ...slide,
       sourceIndex: index,
+      mediaType: slide.mediaType || 'image',
+      durationSeconds: Number.isFinite(slide.durationSeconds) ? slide.durationSeconds : null,
+      posterSrc: slide.posterSrc || '',
       cueTime: Number.isFinite(slide.cueTime)
         ? clampCueTime(slide.cueTime, safeDuration)
         : segment * index,
@@ -29,18 +33,58 @@ export function buildTimeline(slides, duration) {
       return left.sourceIndex - right.sourceIndex;
     });
 
-  const timeline = normalizedSlides.map((slide, index) => ({
-    ...slide,
-    startTime: slide.cueTime,
-    endTime: index < normalizedSlides.length - 1
+  const timeline = normalizedSlides.map((slide, index) => {
+    const nextStartTime = index < normalizedSlides.length - 1
       ? normalizedSlides[index + 1].cueTime
-      : safeDuration,
-  }));
+      : safeDuration;
+    const isVideo = slide.mediaType === 'video';
+    const endTime = isVideo
+      ? clampVideoEndTime(slide.cueTime, slide.durationSeconds, nextStartTime, safeDuration)
+      : nextStartTime;
+    const spanSeconds = Math.max(0, endTime - slide.cueTime);
+
+    if (emitLogs && isVideo) {
+      logEvent('info', 'timeline.video_span_built', {
+        id: slide.id,
+        startTime: slide.cueTime,
+        endTime,
+        durationSeconds: slide.durationSeconds,
+        spanSeconds,
+        clampedByNextCue: Number.isFinite(nextStartTime) && endTime === nextStartTime && nextStartTime < (slide.cueTime + (slide.durationSeconds || 0)),
+      });
+    }
+
+    return {
+      ...slide,
+      startTime: slide.cueTime,
+      endTime,
+      spanSeconds,
+    };
+  });
+
+  return timeline;
+}
+
+export function buildCueLaneTimeline(slides, duration) {
+  if (!Array.isArray(slides) || slides.length === 0) {
+    return [];
+  }
+
+  return buildTimelineItems(slides, duration, { emitLogs: false });
+}
+
+export function buildTimeline(slides, duration) {
+  if (!Array.isArray(slides) || slides.length === 0) {
+    logEvent('warn', 'timeline.empty_slides', { duration });
+    return [];
+  }
+
+  const timeline = buildTimelineItems(slides, duration, { emitLogs: true });
 
   logEvent('info', 'timeline.built', {
-    duration: safeDuration,
+    duration: Number.isFinite(duration) && duration > 0 ? duration : 0,
     slideCount: slides.length,
-    segmentSeconds: segment,
+    segmentSeconds: (Number.isFinite(duration) && duration > 0 ? duration : 0) / slides.length,
     manualCueCount: slides.filter((slide) => Number.isFinite(slide.cueTime)).length,
     cueMap: timeline.map((slide) => ({
       id: slide.id,

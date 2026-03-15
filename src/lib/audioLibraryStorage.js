@@ -2,8 +2,8 @@ import { logEvent } from './logger';
 
 const DB_NAME = 'yan-story-teller';
 const STORE_NAME = 'uploaded-audio';
-const DB_VERSION = 2;
-const AUDIO_KEY = 'presentation-audio';
+const DB_VERSION = 4;
+const AUDIO_LANE_KEY = 'presentation-audio-lane';
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -50,65 +50,88 @@ function runTransaction(mode, executor) {
   );
 }
 
-export async function loadAudio() {
+export async function loadAudioLane() {
   return runTransaction('readonly', (store, resolve, reject) => {
-    const request = store.get(AUDIO_KEY);
+    const request = store.get(AUDIO_LANE_KEY);
     request.onsuccess = () => {
       const record = request.result;
       if (!record) {
-        resolve(null);
+        resolve({
+          targetDurationSeconds: null,
+          audioClips: [],
+          audioTimeline: [],
+        });
         return;
       }
 
+      const audioClips = Array.isArray(record.audioClips)
+        ? record.audioClips.map((clip) => ({
+          ...clip,
+          kind: 'upload',
+          src: URL.createObjectURL(clip.blob),
+          blob: clip.blob,
+          durationSeconds: Number.isFinite(clip.durationSeconds) ? clip.durationSeconds : null,
+          waveformPeaks: Array.isArray(clip.waveformPeaks) ? clip.waveformPeaks : [],
+          desiredStartTime: Number.isFinite(clip.desiredStartTime) ? clip.desiredStartTime : null,
+        }))
+        : [];
+
       resolve({
-        id: record.id,
-        title: record.title,
-        fileName: record.fileName,
-        mimeType: record.mimeType,
-        createdAt: record.createdAt,
-        kind: 'upload',
-        blob: record.blob,
-        src: URL.createObjectURL(record.blob),
+        targetDurationSeconds: Number.isFinite(record.targetDurationSeconds) ? record.targetDurationSeconds : null,
+        audioClips,
+        audioTimeline: Array.isArray(record.audioTimeline) ? record.audioTimeline : [],
       });
     };
-    request.onerror = () => reject(request.error || new Error('Failed to load uploaded audio.'));
+    request.onerror = () => reject(request.error || new Error('Failed to load audio lane.'));
   });
 }
 
-export async function saveAudio(audio) {
+export async function saveAudioLane({ targetDurationSeconds, audioClips, audioTimeline }) {
   return runTransaction('readwrite', (store, resolve, reject) => {
     const request = store.put({
-      id: AUDIO_KEY,
-      title: audio.title,
-      fileName: audio.fileName,
-      mimeType: audio.mimeType,
-      createdAt: audio.createdAt,
-      blob: audio.blob,
+      id: AUDIO_LANE_KEY,
+      targetDurationSeconds: Number.isFinite(targetDurationSeconds) ? targetDurationSeconds : null,
+      audioClips: audioClips.map((clip) => ({
+        id: clip.id,
+        title: clip.title,
+        fileName: clip.fileName,
+        mimeType: clip.mimeType,
+        createdAt: clip.createdAt,
+        storageMode: clip.storageMode || 'local',
+        durationSeconds: Number.isFinite(clip.durationSeconds) ? clip.durationSeconds : null,
+        waveformPeaks: Array.isArray(clip.waveformPeaks) ? clip.waveformPeaks : [],
+        desiredStartTime: Number.isFinite(clip.desiredStartTime) ? clip.desiredStartTime : null,
+        blob: clip.blob,
+      })),
+      audioTimeline,
     });
 
     request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error || new Error('Failed to save uploaded audio.'));
+    request.onerror = () => reject(request.error || new Error('Failed to save audio lane.'));
   });
 }
 
-export async function clearAudio() {
+export async function clearAudioLane() {
   return runTransaction('readwrite', (store, resolve, reject) => {
-    const request = store.delete(AUDIO_KEY);
+    const request = store.delete(AUDIO_LANE_KEY);
     request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error || new Error('Failed to clear uploaded audio.'));
+    request.onerror = () => reject(request.error || new Error('Failed to clear audio lane.'));
   });
 }
 
-export function revokeAudioUrl(audio) {
-  if (!audio || audio.kind !== 'upload' || typeof audio.src !== 'string' || !audio.src.startsWith('blob:')) {
-    return;
-  }
+export function revokeAudioClipUrls(audioClips) {
+  for (const clip of audioClips) {
+    if (!clip || clip.kind !== 'upload' || typeof clip.src !== 'string' || !clip.src.startsWith('blob:')) {
+      continue;
+    }
 
-  try {
-    URL.revokeObjectURL(audio.src);
-  } catch (error) {
-    logEvent('warn', 'presentation_audio.object_url_revoke_failed', {
-      message: error instanceof Error ? error.message : 'Unknown revoke failure',
-    });
+    try {
+      URL.revokeObjectURL(clip.src);
+    } catch (error) {
+      logEvent('warn', 'audio_lane.object_url_revoke_failed', {
+        clipId: clip.id,
+        message: error instanceof Error ? error.message : 'Unknown revoke failure',
+      });
+    }
   }
 }

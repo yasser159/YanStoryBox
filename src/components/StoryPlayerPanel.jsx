@@ -1,4 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion';
+import { useEffect, useRef } from 'react';
+import { UploadPickerButton } from './UploadPickerButton';
+import { logEvent } from '../lib/logger';
 
 function formatTime(totalSeconds) {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds || 0));
@@ -52,10 +55,8 @@ export function PlayerControlsBar({
   rewind,
   rewindTenSeconds,
   forwardTenSeconds,
-  onUploadIntent,
-  onPhotoInputChange,
-  onAudioInputChange,
-  isUploadingPhotos = false,
+  onMediaFilesSelected,
+  isUploadingMedia = false,
   audioMeta,
 }) {
   const progress = playerState.duration > 0
@@ -69,11 +70,11 @@ export function PlayerControlsBar({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
     >
-      <div className="mb-2 flex items-center justify-between gap-3 text-sm text-stone-200">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3 text-sm text-stone-200">
         <div className="max-w-[45vw] truncate rounded-full border border-white/10 bg-stone-950/50 px-3 py-1 text-xs font-medium text-stone-200 sm:max-w-[28rem]">
           Track: <span className="font-semibold text-stone-100">{audioMeta?.fileName || 'demo-story.wav'}</span>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
           <span>{formatTime(playerState.currentTime)}</span>
           <span>{formatTime(playerState.duration || 120)}</span>
         </div>
@@ -117,42 +118,28 @@ export function PlayerControlsBar({
         >
           +10s
         </button>
-        <label
-          onPointerDown={isUploadingPhotos ? undefined : onUploadIntent}
-          className={`relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-full px-4 py-2 text-sm font-semibold transition ${
-            isUploadingPhotos
+        <UploadPickerButton
+          accept="image/*,video/*,audio/*"
+          multiple
+          disabled={isUploadingMedia}
+          onFilesSelected={onMediaFilesSelected}
+          logPrefix="upload_button.media"
+          buttonTestId="upload-media-button"
+          inputTestId="upload-media-input"
+          className={`inline-flex items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition ${
+            isUploadingMedia
               ? 'cursor-wait bg-orange-300/80 text-stone-900'
               : 'cursor-pointer bg-orange-400 text-stone-950 hover:bg-orange-300'
           }`}
         >
-          <input
-            type="file"
-            accept="image/*"
-            multiple
-            disabled={isUploadingPhotos}
-            onChange={onPhotoInputChange}
-            className="absolute inset-0 cursor-pointer opacity-0 disabled:cursor-wait"
-          />
-          {isUploadingPhotos ? <SpinnerIcon /> : null}
-          <span className="pointer-events-none">
-            {isUploadingPhotos ? 'Uploading…' : 'Upload Photos'}
+          {isUploadingMedia ? <SpinnerIcon /> : null}
+          <span>
+            {isUploadingMedia ? 'Uploading…' : 'Upload Media'}
           </span>
-        </label>
-        <label
-          onPointerDown={onUploadIntent}
-          className="relative inline-flex cursor-pointer items-center justify-center overflow-hidden rounded-full bg-orange-400 px-4 py-2 text-sm font-semibold text-stone-950 transition hover:bg-orange-300"
-        >
-          <input
-            type="file"
-            accept="audio/*"
-            onChange={onAudioInputChange}
-            className="absolute inset-0 cursor-pointer opacity-0"
-          />
-          <span className="pointer-events-none">Upload Audio</span>
-        </label>
+        </UploadPickerButton>
       </div>
       <AnimatePresence initial={false}>
-        {isUploadingPhotos ? (
+        {isUploadingMedia ? (
           <motion.div
             className="mt-3 text-center text-xs font-medium uppercase tracking-[0.2em] text-orange-100/85"
             initial={{ opacity: 0, y: 6 }}
@@ -160,7 +147,7 @@ export function PlayerControlsBar({
             exit={{ opacity: 0, y: 6 }}
             transition={{ duration: 0.18, ease: 'easeOut' }}
           >
-            Loading images to Firebase storage. Wait a beat.
+            Loading media to Firebase storage. Wait a beat.
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -173,19 +160,99 @@ export function StoryPlayerPanel({
   playerState,
   className = '',
 }) {
+  const videoRef = useRef(null);
+  const lastVideoSyncRef = useRef({
+    slideId: '',
+    second: -1,
+    isPlaying: null,
+  });
   const activeSlide = timeline[playerState.activeSlideIndex] ?? timeline[0] ?? {};
+  const hasActiveSlide = typeof activeSlide?.src === 'string' && activeSlide.src.length > 0;
+  const isActiveVideo = hasActiveSlide && activeSlide.mediaType === 'video';
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) {
+      return;
+    }
+
+    const offsetSeconds = Math.max(0, playerState.currentTime - (activeSlide.startTime || 0));
+    const boundedOffset = Number.isFinite(activeSlide.spanSeconds)
+      ? Math.min(offsetSeconds, activeSlide.spanSeconds)
+      : offsetSeconds;
+
+    if (Math.abs((video.currentTime || 0) - boundedOffset) > 0.3) {
+      video.currentTime = boundedOffset;
+    }
+
+    const syncSecond = Math.floor(boundedOffset);
+    if (
+      lastVideoSyncRef.current.slideId !== activeSlide.id
+      || lastVideoSyncRef.current.second !== syncSecond
+      || lastVideoSyncRef.current.isPlaying !== playerState.isPlaying
+    ) {
+      logEvent('info', 'player.video_sync_updated', {
+        slideId: activeSlide.id,
+        offsetSeconds: boundedOffset,
+        currentTime: playerState.currentTime,
+        isPlaying: playerState.isPlaying,
+      });
+      lastVideoSyncRef.current = {
+        slideId: activeSlide.id,
+        second: syncSecond,
+        isPlaying: playerState.isPlaying,
+      };
+    }
+
+    if (playerState.isPlaying) {
+      video.play().catch(() => {});
+      return;
+    }
+
+    video.pause();
+  }, [
+    activeSlide.id,
+    activeSlide.mediaType,
+    activeSlide.spanSeconds,
+    activeSlide.startTime,
+    playerState.currentTime,
+    playerState.isPlaying,
+  ]);
 
   return (
     <section className="h-full min-h-[100svh]">
       <article className={`scene-shell relative h-full min-h-[100svh] overflow-hidden border-0 bg-stone-900 shadow-2xl shadow-black/40 ${className}`}>
         <div className="absolute inset-0 bg-black" />
         <div className="absolute inset-0 z-10 flex items-center justify-center p-0">
-          <img
-            key={`${activeSlide?.id}-detail`}
-            src={activeSlide?.src}
-            alt={activeSlide?.title}
-            className="block h-full w-full object-contain object-center"
-          />
+          {hasActiveSlide ? (
+            isActiveVideo ? (
+              <video
+                key={`${activeSlide?.id}-detail`}
+                ref={videoRef}
+                src={activeSlide.src}
+                poster={activeSlide.posterSrc || undefined}
+                muted
+                playsInline
+                preload="auto"
+                autoPlay={playerState.isPlaying}
+                controls={false}
+                data-testid="scene-active-video"
+                className="block h-full w-full object-contain object-center"
+              />
+            ) : (
+              <img
+                key={`${activeSlide?.id}-detail`}
+                src={activeSlide.src}
+                alt={activeSlide?.title || 'Story slide'}
+                data-testid="scene-active-image"
+                className="block h-full w-full object-contain object-center"
+              />
+            )
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-stone-950 text-sm uppercase tracking-[0.2em] text-stone-500">
+              No slide loaded
+            </div>
+          )}
         </div>
       </article>
     </section>

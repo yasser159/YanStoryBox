@@ -9,6 +9,9 @@ export const storySlides = [
     caption: 'Ready signal on deck while the story waits for the first cue.',
     src: screenTestImage,
     kind: 'demo',
+    mediaType: 'image',
+    durationSeconds: null,
+    posterSrc: '',
   },
   {
     id: 'slide-2',
@@ -16,6 +19,9 @@ export const storySlides = [
     caption: 'The rhythm picks up and the pictures start moving with the beat.',
     src: `${assetBase}images/slide-2.svg`,
     kind: 'demo',
+    mediaType: 'image',
+    durationSeconds: null,
+    posterSrc: '',
   },
   {
     id: 'slide-3',
@@ -23,6 +29,9 @@ export const storySlides = [
     caption: 'Halfway through, the visuals hit like old photos in a shoebox.',
     src: `${assetBase}images/slide-3.svg`,
     kind: 'demo',
+    mediaType: 'image',
+    durationSeconds: null,
+    posterSrc: '',
   },
   {
     id: 'slide-4',
@@ -30,6 +39,9 @@ export const storySlides = [
     caption: 'The pace stretches out and lets the moment breathe.',
     src: `${assetBase}images/slide-4.svg`,
     kind: 'demo',
+    mediaType: 'image',
+    durationSeconds: null,
+    posterSrc: '',
   },
   {
     id: 'slide-5',
@@ -37,6 +49,9 @@ export const storySlides = [
     caption: 'Last frame lands clean while the audio wraps the scene.',
     src: `${assetBase}images/slide-5.svg`,
     kind: 'demo',
+    mediaType: 'image',
+    durationSeconds: null,
+    posterSrc: '',
   },
 ];
 

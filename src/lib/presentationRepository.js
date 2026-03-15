@@ -11,6 +11,8 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { firestore, storage } from './firebaseClient';
+import { buildMediaItem } from './visualMedia';
+import { buildAudioClipRecord } from './audioComposition';
 
 const COLLECTION = 'presentations';
 const DOCUMENT_ID = 'yan-story-teller-default';
@@ -30,6 +32,9 @@ function mapSlideRecord(record) {
     caption: record.caption,
     src: record.src,
     kind: 'upload',
+    mediaType: record.mediaType || 'image',
+    durationSeconds: Number.isFinite(record.durationSeconds) ? record.durationSeconds : null,
+    posterSrc: record.posterSrc || '',
     fileName: record.fileName,
     mimeType: record.mimeType,
     createdAt: record.createdAt,
@@ -52,6 +57,23 @@ function mapAudioRecord(record) {
   };
 }
 
+function mapAudioClipRecord(record) {
+  return {
+    id: record.id,
+    title: record.title,
+    fileName: record.fileName,
+    mimeType: record.mimeType,
+    createdAt: record.createdAt,
+    kind: 'upload',
+    src: record.src,
+    storagePath: record.storagePath,
+    storageMode: record.storageMode || 'remote',
+    durationSeconds: Number.isFinite(record.durationSeconds) ? record.durationSeconds : null,
+    waveformPeaks: Array.isArray(record.waveformPeaks) ? record.waveformPeaks : [],
+    desiredStartTime: Number.isFinite(record.desiredStartTime) ? record.desiredStartTime : null,
+  };
+}
+
 async function uploadFile(file, path) {
   const ref = storageRef(storage, path);
   await uploadBytes(ref, file, { contentType: file.type || undefined });
@@ -62,38 +84,47 @@ async function uploadFile(file, path) {
 export async function loadPresentation() {
   const snapshot = await getDoc(presentationDocRef());
   if (!snapshot.exists()) {
-    return { slides: [], audio: null };
+    return { slides: [], audio: null, audioClips: [], audioTimeline: [], targetDurationSeconds: null };
   }
 
   const data = snapshot.data();
   return {
     slides: Array.isArray(data.slides) ? data.slides.map(mapSlideRecord) : [],
     audio: mapAudioRecord(data.audio),
+    audioClips: Array.isArray(data.audioClips) ? data.audioClips.map(mapAudioClipRecord) : [],
+    audioTimeline: Array.isArray(data.audioTimeline) ? data.audioTimeline.map((clip) => ({
+      ...clip,
+      durationSeconds: Number.isFinite(clip.durationSeconds) ? clip.durationSeconds : null,
+      startTime: Number.isFinite(clip.startTime) ? clip.startTime : null,
+      endTime: Number.isFinite(clip.endTime) ? clip.endTime : null,
+      spanSeconds: Number.isFinite(clip.spanSeconds) ? clip.spanSeconds : null,
+    })) : [],
+    targetDurationSeconds: Number.isFinite(data.targetDurationSeconds) ? data.targetDurationSeconds : null,
   };
 }
 
-export async function uploadSlides(files) {
+export async function uploadSlides(filesWithMetadata) {
   const uploadedSlides = [];
 
-  for (const file of files) {
+  for (const { file, metadata } of filesWithMetadata) {
     const id = `upload-${crypto.randomUUID()}`;
     const fileName = sanitizeFileName(file.name);
     const createdAt = new Date().toISOString();
-    const path = `presentations/${DOCUMENT_ID}/photos/${id}-${fileName}`;
+    const folder = metadata.mediaType === 'video' ? 'videos' : 'photos';
+    const path = `presentations/${DOCUMENT_ID}/${folder}/${id}-${fileName}`;
     const asset = await uploadFile(file, path);
 
-    uploadedSlides.push({
+    uploadedSlides.push(buildMediaItem({
       id,
-      title: file.name.replace(/\.[^.]+$/, '') || 'Uploaded photo',
-      caption: 'Uploaded photo',
+      file,
       src: asset.src,
-      kind: 'upload',
-      fileName: file.name,
-      mimeType: file.type,
-      createdAt,
       storagePath: asset.storagePath,
-      cueTime: null,
-    });
+      storageMode: 'remote',
+      mediaType: metadata.mediaType,
+      durationSeconds: metadata.durationSeconds,
+      posterSrc: metadata.posterSrc,
+      createdAt,
+    }));
   }
 
   return uploadedSlides;
@@ -130,10 +161,48 @@ export async function uploadAudio(file) {
   };
 }
 
+export async function uploadAudioClips(filesWithMetadata) {
+  const uploadedClips = [];
+
+  for (const { file, metadata } of filesWithMetadata) {
+    const id = `audio-clip-${crypto.randomUUID()}`;
+    const fileName = sanitizeFileName(file.name);
+    const createdAt = new Date().toISOString();
+    const path = `presentations/${DOCUMENT_ID}/audio-clips/${id}-${fileName}`;
+    const asset = await uploadFile(file, path);
+
+    uploadedClips.push(buildAudioClipRecord({
+      id,
+      file,
+      src: asset.src,
+      storagePath: asset.storagePath,
+      storageMode: 'remote',
+      durationSeconds: metadata.durationSeconds,
+      waveformPeaks: metadata.waveformPeaks,
+      createdAt,
+    }));
+  }
+
+  return uploadedClips;
+}
+
 export async function saveAudio(audio) {
   await setDoc(
     presentationDocRef(),
     { audio },
+    { merge: true },
+  );
+}
+
+export async function saveAudioLane({ targetDurationSeconds, audioClips, audioTimeline }) {
+  await setDoc(
+    presentationDocRef(),
+    {
+      audio: null,
+      targetDurationSeconds: Number.isFinite(targetDurationSeconds) ? targetDurationSeconds : null,
+      audioClips,
+      audioTimeline,
+    },
     { merge: true },
   );
 }
@@ -150,6 +219,9 @@ export async function ensurePresentationDocument() {
     await setDoc(ref, {
       slides: [],
       audio: null,
+      audioClips: [],
+      audioTimeline: [],
+      targetDurationSeconds: null,
       updatedAt: new Date().toISOString(),
     });
     return;

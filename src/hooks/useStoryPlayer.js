@@ -3,7 +3,7 @@ import { buildTimeline } from '../lib/timeline';
 import { StoryPlayer } from '../lib/storyPlayer';
 import { logEvent } from '../lib/logger';
 
-export function useStoryPlayer({ audioSrc, slides }) {
+export function useStoryPlayer({ audioSrc, audioTimeline, durationHint = 0, slides }) {
   const audioRef = useRef(null);
   const playerRef = useRef(null);
   const [playerState, setPlayerState] = useState({
@@ -16,30 +16,38 @@ export function useStoryPlayer({ audioSrc, slides }) {
   });
 
   const timeline = useMemo(
-    () => buildTimeline(slides, playerState.duration || 0),
-    [playerState.duration, slides],
+    () => buildTimeline(slides, durationHint || playerState.duration || 0),
+    [durationHint, playerState.duration, slides],
   );
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return undefined;
 
-    audio.src = audioSrc;
-    audio.preload = 'metadata';
-
-    const player = new StoryPlayer({ audio, timeline });
+    const player = new StoryPlayer({
+      audio,
+      timeline,
+      audioTimeline,
+      fallbackAudioSrc: audioSrc,
+      durationHint,
+    });
     playerRef.current = player;
     player.mount();
 
     const unsubscribe = player.subscribe(setPlayerState);
-    logEvent('info', 'hook.player_ready', { audioSrc, slideCount: slides.length });
+    logEvent('info', 'hook.player_ready', {
+      audioSrc,
+      slideCount: slides.length,
+      audioClipCount: audioTimeline.length,
+      durationHint,
+    });
 
     return () => {
       unsubscribe();
       player.unmount();
       playerRef.current = null;
     };
-  }, [audioSrc]);
+  }, [audioSrc, audioTimeline, durationHint]);
 
   useEffect(() => {
     const player = playerRef.current;
@@ -52,6 +60,21 @@ export function useStoryPlayer({ audioSrc, slides }) {
     });
   }, [timeline]);
 
+  useEffect(() => {
+    const player = playerRef.current;
+    if (!player) return;
+
+    player.updateAudioTimeline(audioTimeline, {
+      fallbackAudioSrc: audioSrc,
+      durationHint,
+    });
+    logEvent('info', 'hook.audio_timeline_ready', {
+      clipCount: audioTimeline.length,
+      clipIds: audioTimeline.map((clip) => clip.id),
+      durationHint,
+    });
+  }, [audioSrc, audioTimeline, durationHint]);
+
   return {
     audioRef,
     playerState,
@@ -60,6 +83,7 @@ export function useStoryPlayer({ audioSrc, slides }) {
     rewind: () => playerRef.current?.rewind(),
     rewindTenSeconds: () => playerRef.current?.rewindTenSeconds(),
     forwardTenSeconds: () => playerRef.current?.forwardTenSeconds(),
+    seekTo: (nextTime) => playerRef.current?.seekTo(nextTime),
     pause: () => playerRef.current?.pause(),
   };
 }
