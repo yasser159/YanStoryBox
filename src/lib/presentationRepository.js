@@ -11,6 +11,7 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { firestore, storage } from './firebaseClient';
+import { buildMediaItem } from './visualMedia';
 
 const COLLECTION = 'presentations';
 const DOCUMENT_ID = 'yan-story-teller-default';
@@ -30,6 +31,9 @@ function mapSlideRecord(record) {
     caption: record.caption,
     src: record.src,
     kind: 'upload',
+    mediaType: record.mediaType || 'image',
+    durationSeconds: Number.isFinite(record.durationSeconds) ? record.durationSeconds : null,
+    posterSrc: record.posterSrc || '',
     fileName: record.fileName,
     mimeType: record.mimeType,
     createdAt: record.createdAt,
@@ -72,28 +76,28 @@ export async function loadPresentation() {
   };
 }
 
-export async function uploadSlides(files) {
+export async function uploadSlides(filesWithMetadata) {
   const uploadedSlides = [];
 
-  for (const file of files) {
+  for (const { file, metadata } of filesWithMetadata) {
     const id = `upload-${crypto.randomUUID()}`;
     const fileName = sanitizeFileName(file.name);
     const createdAt = new Date().toISOString();
-    const path = `presentations/${DOCUMENT_ID}/photos/${id}-${fileName}`;
+    const folder = metadata.mediaType === 'video' ? 'videos' : 'photos';
+    const path = `presentations/${DOCUMENT_ID}/${folder}/${id}-${fileName}`;
     const asset = await uploadFile(file, path);
 
-    uploadedSlides.push({
+    uploadedSlides.push(buildMediaItem({
       id,
-      title: file.name.replace(/\.[^.]+$/, '') || 'Uploaded photo',
-      caption: 'Uploaded photo',
+      file,
       src: asset.src,
-      kind: 'upload',
-      fileName: file.name,
-      mimeType: file.type,
-      createdAt,
       storagePath: asset.storagePath,
-      cueTime: null,
-    });
+      storageMode: 'remote',
+      mediaType: metadata.mediaType,
+      durationSeconds: metadata.durationSeconds,
+      posterSrc: metadata.posterSrc,
+      createdAt,
+    }));
   }
 
   return uploadedSlides;

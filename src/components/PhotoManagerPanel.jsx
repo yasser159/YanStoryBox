@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { canRemoveCueFromTimeline } from '../lib/cueRemoval';
+import { buildCueLaneTimeline } from '../lib/timeline';
 
 const EMPTY_DRAG_STATE = {
   id: '',
@@ -11,7 +12,7 @@ function EmptyState({ isHydrating }) {
     <div className="rounded-[2rem] border border-dashed border-white/10 bg-stone-950/40 p-6 text-sm text-stone-400">
       {isHydrating
         ? 'Restoring uploaded photos from your browser storage.'
-        : 'Upload photos to replace the demo slides. Drag thumbnails to change the story order.'}
+        : 'Upload photos or short videos to replace the demo slides. Drag thumbnails to change the story order.'}
     </div>
   );
 }
@@ -23,19 +24,76 @@ function formatCueTime(totalSeconds) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-function resolveCueTime(slide, index, slideCount, duration) {
-  if (Number.isFinite(slide.cueTime)) {
-    if (duration > 0) {
-      return Math.min(Math.max(0, slide.cueTime), duration);
-    }
-    return Math.max(0, slide.cueTime);
+function getTimelineTickStep(duration) {
+  if (duration <= 30) return 5;
+  if (duration <= 90) return 10;
+  if (duration <= 180) return 15;
+  return 30;
+}
+
+function buildTimelineTicks(duration) {
+  if (!(duration > 0)) {
+    return [];
   }
 
-  if (!(duration > 0) || slideCount === 0) {
-    return 0;
+  const ticks = [];
+  const step = getTimelineTickStep(duration);
+
+  for (let value = 0; value <= duration; value += step) {
+    ticks.push({
+      value,
+      label: formatCueTime(value),
+      leftPercent: (value / duration) * 100,
+    });
   }
 
-  return (duration / slideCount) * index;
+  if (ticks[ticks.length - 1]?.value !== duration) {
+    ticks.push({
+      value: duration,
+      label: formatCueTime(duration),
+      leftPercent: 100,
+    });
+  }
+
+  return ticks;
+}
+
+function PlayBadge() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center">
+      <div className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-black/65 text-stone-100 shadow-lg shadow-black/30">
+        <svg viewBox="0 0 24 24" aria-hidden="true" className="ml-0.5 h-4 w-4 fill-current">
+          <path d="M8.75 6.2c0-1.02 1.1-1.66 1.99-1.15l8.11 4.67c.89.51.89 1.79 0 2.3l-8.11 4.67c-.89.51-1.99-.13-1.99-1.15V6.2Z" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function VisualThumb({ slide, className }) {
+  if (slide.mediaType === 'video') {
+    return (
+      <div className={`relative ${className}`}>
+        <video
+          src={slide.src}
+          poster={slide.posterSrc || undefined}
+          muted
+          playsInline
+          preload="metadata"
+          className="h-full w-full object-cover"
+        />
+        <PlayBadge />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={slide.src}
+      alt={slide.title}
+      className={className}
+    />
+  );
 }
 
 export function PhotoManagerPanel({
@@ -56,13 +114,14 @@ export function PhotoManagerPanel({
 }) {
   const [dragState, setDragState] = useState(EMPTY_DRAG_STATE);
   const draggedId = dragState.id;
-  const cueSlides = uploads
-    .filter((slide) => Number.isFinite(slide.cueTime))
-    .map((slide, index) => ({
-      ...slide,
-      resolvedCueTime: resolveCueTime(slide, index, uploads.length, trackDuration),
-    }))
-    .sort((left, right) => left.resolvedCueTime - right.resolvedCueTime || left.id.localeCompare(right.id));
+  const cueSlides = useMemo(
+    () => buildCueLaneTimeline(
+      uploads.filter((slide) => Number.isFinite(slide.cueTime)),
+      trackDuration,
+    ),
+    [trackDuration, uploads],
+  );
+  const rulerTicks = buildTimelineTicks(trackDuration);
 
   const playheadPercent = trackDuration > 0
     ? Math.min(100, Math.max(0, (currentTime / trackDuration) * 100))
@@ -117,13 +176,31 @@ export function PhotoManagerPanel({
                   <span>Slide Cue Lane</span>
                   <span>{formatCueTime(trackDuration)}</span>
                 </div>
+                <div className="mb-3 grid h-8 grid-cols-1">
+                  <div className="relative h-full">
+                    {rulerTicks.map((tick) => (
+                      <div
+                        key={`tick-${tick.value}`}
+                        className="absolute bottom-0 top-0"
+                        style={{ left: `${tick.leftPercent}%` }}
+                      >
+                        <div className="flex h-full -translate-x-1/2 flex-col items-center">
+                          <span className="text-[10px] font-medium text-stone-500">{tick.label}</span>
+                          <span className="mt-1 h-3 w-px bg-white/20" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
                 <div
                   className="relative h-24 rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2"
+                  data-testid="cue-timeline-shell"
                 >
                   <div
                     className="absolute inset-x-3 bottom-5 top-2"
                     onDragOver={handleDragOver}
                     onDrop={handleCueDrop}
+                    data-testid="cue-timeline-lane"
                   >
                     <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-white/10" />
                     <div
@@ -136,8 +213,12 @@ export function PhotoManagerPanel({
                       </div>
                     ) : null}
                     {cueSlides.map((slide) => {
-                      const leftPercent = trackDuration > 0 ? (slide.resolvedCueTime / trackDuration) * 100 : 0;
+                      const leftPercent = trackDuration > 0 ? (slide.startTime / trackDuration) * 100 : 0;
                       const isActive = slide.id === activeSlideId;
+                      const isVideo = slide.mediaType === 'video';
+                      const blockWidth = isVideo && trackDuration > 0
+                        ? `max(4.5rem, ${(Math.max(slide.spanSeconds || slide.durationSeconds || 1, 1) / trackDuration) * 100}%)`
+                        : '3.5rem';
 
                       return (
                         <div
@@ -145,14 +226,22 @@ export function PhotoManagerPanel({
                           draggable
                           onDragStart={() => setDragState({ id: slide.id, source: 'cue' })}
                           onDragEnd={() => setDragState(EMPTY_DRAG_STATE)}
-                          className={`absolute top-0 flex w-14 -translate-x-1/2 cursor-grab flex-col items-center gap-1 ${draggedId === slide.id ? 'opacity-60' : ''}`}
-                          style={{ left: `${leftPercent}%` }}
+                          data-testid={`cue-marker-${slide.id}`}
+                          className={`absolute top-0 flex cursor-grab flex-col items-center gap-1 ${draggedId === slide.id ? 'opacity-60' : ''} ${isVideo ? '' : '-translate-x-1/2'}`}
+                          style={{
+                            left: `${leftPercent}%`,
+                            width: blockWidth,
+                            maxWidth: isVideo ? `calc(100% - ${leftPercent}%)` : undefined,
+                          }}
                         >
-                          <div className={`overflow-hidden rounded-lg border ${isActive ? 'border-orange-300/70' : 'border-white/15'}`}>
-                            <img src={slide.src} alt={slide.title} className="h-10 w-10 object-cover" />
+                          <div className={`relative overflow-hidden rounded-lg border ${isActive ? 'border-orange-300/70' : 'border-white/15'} ${isVideo ? 'w-full' : ''}`}>
+                            <VisualThumb
+                              slide={slide}
+                              className={isVideo ? 'h-10 w-full object-cover' : 'h-10 w-10 object-cover'}
+                            />
                           </div>
                           <div className={`rounded-full px-2 py-0.5 text-[10px] font-semibold tabular-nums ${isActive ? 'bg-orange-300 text-stone-950' : 'bg-black/70 text-stone-100'}`}>
-                            {formatCueTime(slide.resolvedCueTime)}
+                            {formatCueTime(slide.startTime)}
                           </div>
                         </div>
                       );
@@ -179,6 +268,7 @@ export function PhotoManagerPanel({
                     clearSlideCueTime(draggedId);
                     setDragState(EMPTY_DRAG_STATE);
                   }}
+                  data-testid="remove-from-timeline"
                   className={`mt-3 flex min-h-12 w-full items-center justify-center rounded-2xl border border-dashed px-4 py-3 text-xs font-semibold uppercase tracking-[0.18em] transition ${
                     draggedId && isDraggedSlidePinned
                       ? 'border-rose-400/70 bg-rose-400/10 text-rose-100'
@@ -188,7 +278,7 @@ export function PhotoManagerPanel({
                   Remove From Timeline
                 </div>
                 <p className="mt-2 text-xs text-stone-400">
-                  Drag a thumbnail onto the cue lane to pin that image to a specific moment in the track. Drag a pinned cue onto the remove strip to send it back to auto timing.
+                  Drag a thumbnail onto the cue lane to pin that visual to a specific moment in the track. Video blocks stretch to match their seconds on screen. Drag a pinned cue onto the remove strip to send it back to auto timing.
                 </p>
               </div>
             ) : null}
@@ -209,6 +299,7 @@ export function PhotoManagerPanel({
                     setDragState(EMPTY_DRAG_STATE);
                   }}
                   onDragEnd={() => setDragState(EMPTY_DRAG_STATE)}
+                  data-testid={`visual-thumb-${slide.id}`}
                   className={`group overflow-hidden rounded-lg border transition ${
                     isActive
                       ? 'border-orange-300/60 bg-orange-300/10'
@@ -216,10 +307,18 @@ export function PhotoManagerPanel({
                   } ${isDragging ? 'scale-[0.98] opacity-70' : ''}`}
                 >
                   <div className="relative">
-                    <img src={slide.src} alt={slide.title} className="aspect-square w-full object-cover" />
+                    <VisualThumb
+                      slide={slide}
+                      className="aspect-square w-full object-cover"
+                    />
                     <div className="absolute left-1 top-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.15em] text-stone-100">
                       #{index + 1}
                     </div>
+                    {slide.mediaType === 'video' ? (
+                      <div className="absolute right-1 bottom-1 rounded-full bg-black/75 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.15em] text-stone-100">
+                        {Math.round(slide.durationSeconds || 0)}s
+                      </div>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => removeSlide(slide.id)}

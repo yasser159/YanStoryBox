@@ -28,6 +28,8 @@
 - [x] Implement shared UI state management for the presentation overlay and controls pinning
 - [x] Add reliable explicit removal controls for pinned cue items
 - [x] Add a unit test for cue drag-out removal logic
+- [x] Add short video support to the visual library, timeline, and scene playback
+- [x] Add video-specific unit tests and a Chromium browser regression for inline scene playback
 
 # Notes
 
@@ -58,6 +60,10 @@
 - Timeline removal decision: pinned cues should be removed through the full-width remove strip below the cue lane.
 - Cue lane display decision: the cue lane should render only manually pinned slides; auto-timed slides belong to playback, not the manual cue board.
 - Testing decision: the cue-clear rule should live in a pure helper so it can be unit tested without dragging fake browser events through the mud.
+- Video decision: uploaded visuals now accept both `image/*` and `video/*`, with videos capped at 15 seconds and treated as muted visual inserts over the master soundtrack.
+- Timeline decision: pinned videos occupy explicit spans based on `durationSeconds`, clamped to the next cue start so they do not bulldoze later cues.
+- Thumbnail decision: v1 uses a generic live `<video>` thumb with a play badge instead of blocking uploads on poster extraction; the first-frame poster attempt was not worth hanging the whole picker flow.
+- Browser-test decision: the video playback regression seeds IndexedDB locally instead of mutating shared Firebase presentation data during automated tests.
 
 # Kill List
 
@@ -88,6 +94,8 @@
 - Rejected: relying on drop-zone `dragover` alone to maintain active target state. Reason: if the browser never emits the leave we expect, the lane keeps thinking the cue is still inside.
 - Rejected: drag-out-of-lane as the primary removal contract. Reason: it kept fronting in the real browser; explicit removal targets are easier to use and easier to verify.
 - Rejected: showing auto-timed slides inside the manual cue lane. Reason: it makes “remove from timeline” look broken because the slide still appears there with a fallback time.
+- Rejected: blocking video uploads on poster extraction. Reason: the canvas/seek trick hung headless Chromium and could freeze the whole upload path just to chase a pretty thumbnail.
+- Rejected: browser tests that upload videos against shared Firebase state. Reason: tests should not scribble on the shared presentation doc just to prove inline video playback.
 
 # Review
 
@@ -121,6 +129,16 @@
 - Verification: `npm run build` passed on 2026-03-15 after extracting the cue drag-end decision into a pure helper.
 - Verification: `npm run test:unit` passed on 2026-03-15 after replacing flaky drag metadata checks with explicit valid-target tracking for cue removal.
 - Verification: `npm run build` passed on 2026-03-15 after the cue-removal bug fix.
+- Added generic visual-media helpers that normalize image/video uploads, validate the 15-second video cap, and enrich uploaded records with `mediaType`, `durationSeconds`, and `posterSrc`.
+- Extended Firebase/local slide persistence so uploaded videos round-trip with their type and duration metadata instead of pretending every visual is a still image.
+- Updated the core timeline builder so pinned videos create explicit spans, emit `timeline.video_span_built`, and clamp to the next cue instead of stomping later pinned items.
+- Updated the scene renderer to swap in a muted inline `<video>` when the active timeline item is a video, syncing its playback position from the master audio clock and logging `player.video_sync_updated`.
+- Updated the thumbnail grid and cue lane so videos show play badges, duration chips, a seconds ruler, and wider pinned blocks based on their real span.
+- Added unit coverage for visual-media normalization plus video-span building and clamping.
+- Added a Chromium regression test that seeds a local 12-second video, verifies the pinned cue block renders in the lane, and confirms the scene plays it inline as a muted `<video>`.
+- Verification: `npm run test:unit` passed on 2026-03-15 after the short-video support landed.
+- Verification: `npx playwright test tests/scene-layout.spec.js` passed on 2026-03-15 with the seeded short-video regression.
+- Verification: `npm run build` passed on 2026-03-15 after the short-video support landed.
 - Verification: `npm run build` passed on 2026-03-14 after introducing the shared Zustand UI store.
 - Verification: `npx playwright test tests/scene-layout.spec.js --grep "visible photo upload button opens a file chooser"` passed on 2026-03-14 after the state-management refactor touched the player controls bar.
 - Verification: Playwright confirmed on 2026-03-14 that dragging a manually pinned cue marker onto `Remove From Timeline` emits `photos.cue_cleared`.

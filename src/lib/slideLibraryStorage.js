@@ -2,7 +2,7 @@ import { logEvent } from './logger';
 
 const DB_NAME = 'yan-story-teller';
 const STORE_NAME = 'uploaded-slides';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 function openDatabase() {
   return new Promise((resolve, reject) => {
@@ -64,6 +64,9 @@ export async function loadSlides() {
           caption: record.caption,
           src: URL.createObjectURL(record.blob),
           kind: 'upload',
+          mediaType: record.mediaType || 'image',
+          durationSeconds: Number.isFinite(record.durationSeconds) ? record.durationSeconds : null,
+          posterSrc: record.posterSrc || '',
           fileName: record.fileName,
           mimeType: record.mimeType,
           createdAt: record.createdAt,
@@ -98,6 +101,9 @@ export async function saveSlides(slides) {
           mimeType: slide.mimeType,
           createdAt: slide.createdAt,
           order,
+          mediaType: slide.mediaType || 'image',
+          durationSeconds: Number.isFinite(slide.durationSeconds) ? slide.durationSeconds : null,
+          posterSrc: slide.posterSrc || '',
           cueTime: Number.isFinite(slide.cueTime) ? slide.cueTime : null,
           blob: slide.blob,
         });
