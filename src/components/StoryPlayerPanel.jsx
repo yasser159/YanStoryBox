@@ -49,6 +49,49 @@ function SpinnerIcon() {
   );
 }
 
+export function StagePreview({ activeSlide, isInGap, playerState }) {
+  const previewVideoRef = useRef(null);
+  const isVideo = activeSlide?.mediaType === 'video';
+  const hasSrc = typeof activeSlide?.src === 'string' && activeSlide.src.length > 0;
+  const showMedia = hasSrc && !isInGap;
+
+  useEffect(() => {
+    const video = previewVideoRef.current;
+    if (!video || !isVideo || !showMedia) return;
+    const offsetSeconds = Math.max(0, (playerState.currentTime || 0) - (activeSlide.startTime || 0));
+    if (Math.abs((video.currentTime || 0) - offsetSeconds) > 0.3) {
+      video.currentTime = offsetSeconds;
+    }
+    if (playerState.isPlaying) {
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [isVideo, showMedia, activeSlide?.startTime, playerState.currentTime, playerState.isPlaying]);
+
+  return (
+    <div className="aspect-video h-28 self-center overflow-hidden rounded-2xl border border-white/15 bg-black shadow-2xl shadow-black/60">
+      {showMedia ? (
+        isVideo ? (
+          <video
+            key={`${activeSlide.id}-preview`}
+            ref={previewVideoRef}
+            src={activeSlide.src}
+            muted
+            playsInline
+            preload="auto"
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <img src={activeSlide.src} alt="" className="h-full w-full object-cover" />
+        )
+      ) : (
+        <div className="h-full w-full bg-black" />
+      )}
+    </div>
+  );
+}
+
 export function PlayerControlsBar({
   playerState,
   togglePlayback,
@@ -182,7 +225,13 @@ export function StoryPlayerPanel({
   });
   const activeSlide = timeline[playerState.activeSlideIndex] ?? timeline[0] ?? {};
   const hasActiveSlide = typeof activeSlide?.src === 'string' && activeSlide.src.length > 0;
-  const isActiveVideo = hasActiveSlide && activeSlide.mediaType === 'video';
+  const isActiveVideo = hasActiveSlide && activeSlide.mediaType === 'video' && activeSlide.isPinned;
+  const isInGap =
+    timeline.length > 0 &&
+    hasActiveSlide &&
+    (playerState.currentTime < activeSlide.startTime ||
+      playerState.currentTime >= activeSlide.endTime ||
+      (activeSlide.mediaType === 'video' && !activeSlide.isPinned));
 
   useEffect(() => {
     const video = videoRef.current;
@@ -238,34 +287,34 @@ export function StoryPlayerPanel({
       <article className={`scene-shell relative h-full min-h-[100svh] overflow-hidden border-0 bg-stone-900 shadow-2xl shadow-black/40 ${className}`}>
         <div className="absolute inset-0 bg-black" />
         <div className="absolute inset-0 z-10 flex items-center justify-center p-0">
-          {hasActiveSlide ? (
-            isActiveVideo ? (
-              <video
-                key={`${activeSlide?.id}-detail`}
-                ref={videoRef}
-                src={activeSlide.src}
-                poster={activeSlide.posterSrc || undefined}
-                muted
-                playsInline
-                preload="auto"
-                autoPlay={playerState.isPlaying}
-                controls={false}
-                data-testid="scene-active-video"
-                className="block h-full w-full object-contain object-center"
-              />
-            ) : (
-              <img
-                key={`${activeSlide?.id}-detail`}
-                src={activeSlide.src}
-                alt={activeSlide?.title || 'Story slide'}
-                data-testid="scene-active-image"
-                className="block h-full w-full object-contain object-center"
-              />
-            )
-          ) : (
+          {!hasActiveSlide ? (
             <div className="flex h-full w-full items-center justify-center bg-stone-950 text-sm uppercase tracking-[0.2em] text-stone-500">
               No slide loaded
             </div>
+          ) : isInGap ? (
+            <div className="h-full w-full bg-black" />
+          ) : isActiveVideo ? (
+            <video
+              key={`${activeSlide?.id}-detail`}
+              ref={videoRef}
+              src={activeSlide.src}
+              poster={activeSlide.posterSrc || undefined}
+              muted
+              playsInline
+              preload="auto"
+              autoPlay={playerState.isPlaying}
+              controls={false}
+              data-testid="scene-active-video"
+              className="block h-full w-full object-contain object-center"
+            />
+          ) : (
+            <img
+              key={`${activeSlide?.id}-detail`}
+              src={activeSlide.src}
+              alt={activeSlide?.title || 'Story slide'}
+              data-testid="scene-active-image"
+              className="block h-full w-full object-contain object-center"
+            />
           )}
         </div>
       </article>

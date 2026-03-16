@@ -9,6 +9,7 @@ const EMPTY_DRAG_STATE = {
   source: '',
   kind: '',
   offsetSeconds: 0,
+  grabOffsetPx: 0,
 };
 
 const TIMELINE_LANE_HEIGHT_CLASS = 'h-36';
@@ -90,9 +91,9 @@ function VisualThumb({ slide, className }) {
   return <img src={slide.src} alt={slide.title} className={className} />;
 }
 
-function clampDropTime(event, duration) {
+function clampDropTime(event, duration, offsetPx = 0) {
   const rect = event.currentTarget.getBoundingClientRect();
-  const relativeX = Math.min(Math.max(0, event.clientX - rect.left), rect.width);
+  const relativeX = Math.min(Math.max(0, event.clientX - rect.left - offsetPx), rect.width);
   return (relativeX / rect.width) * duration;
 }
 
@@ -127,7 +128,7 @@ export function PhotoManagerPanel({
   const [durationDraft, setDurationDraft] = useState(targetDurationInput);
   const [playheadDragging, setPlayheadDragging] = useState(false);
   const sharedTimelineRef = useRef(null);
-  const effectiveDuration = targetDurationSeconds || trackDuration || 0;
+  const effectiveDuration = (audioClips.length ? targetDurationSeconds : 0) || trackDuration || 0;
   const cueSlides = useMemo(
     () => buildCueLaneTimeline(
       uploads.filter((slide) => Number.isFinite(slide.cueTime)),
@@ -289,7 +290,7 @@ export function PhotoManagerPanel({
                   <div className="relative space-y-4">
                     <div className={`relative ${TIMELINE_LANE_HEIGHT_CLASS} rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2`}>
                       <div
-                        className="absolute inset-x-3 bottom-2 top-2"
+                        className="absolute inset-x-0 bottom-2 top-2"
                         onClick={(event) => {
                           if (dragState.kind || playheadDragging) return;
                           seekFromClientX(event.clientX);
@@ -376,10 +377,10 @@ export function PhotoManagerPanel({
                     </div>
 
                     {effectiveDuration > 0 ? (
-                      <div className="rounded-[1.5rem] border border-white/10 bg-stone-950/40 p-3">
+                      <div className="rounded-[1.5rem] border border-white/10 bg-stone-950/40 py-3">
                         <div className={`relative ${TIMELINE_LANE_HEIGHT_CLASS} rounded-2xl border border-dashed border-white/15 bg-stone-950/70 px-3 py-2`} data-testid="cue-timeline-shell">
                           <div
-                            className="absolute inset-x-3 bottom-5 top-2"
+                            className="absolute inset-x-0 bottom-5 top-2"
                             onClick={(event) => {
                               if (dragState.kind || playheadDragging) return;
                               seekFromClientX(event.clientX);
@@ -393,7 +394,7 @@ export function PhotoManagerPanel({
                                 return;
                               }
                               setDropHandled(true);
-                              setSlideCueTime(dragState.id, clampDropTime(event, effectiveDuration), effectiveDuration);
+                              setSlideCueTime(dragState.id, clampDropTime(event, effectiveDuration, dragState.grabOffsetPx), effectiveDuration);
                               setDragState(EMPTY_DRAG_STATE);
                             }}
                             data-testid="cue-timeline-lane"
@@ -404,21 +405,27 @@ export function PhotoManagerPanel({
                                 No pinned cues yet
                               </div>
                             ) : null}
-                            {cueSlides.map((slide) => {
+                            {cueSlides.map((slide, index) => {
                               const leftPercent = effectiveDuration > 0 ? (slide.startTime / effectiveDuration) * 100 : 0;
                               const isActive = slide.id === activeSlideId;
                               const isVideo = slide.mediaType === 'video';
                               const blockWidth = isVideo && effectiveDuration > 0
-                                ? `max(6rem, ${(Math.max(slide.spanSeconds || slide.durationSeconds || 1, 1) / effectiveDuration) * 100}%)`
+                                ? `max(4px, ${(slide.spanSeconds / effectiveDuration) * 100}%)`
                                 : '5rem';
+                              const nextSlide = cueSlides[index + 1];
+                              const maxWidth = effectiveDuration > 0 && nextSlide
+                                ? `${((nextSlide.startTime - slide.startTime) / effectiveDuration) * 100}%`
+                                : `calc(100% - ${leftPercent}%)`;
 
                               return (
                                 <div
                                   key={`${slide.id}-cue`}
                                   draggable
-                                  onDragStart={() => {
+                                  onDragStart={(event) => {
+                                    const itemRect = event.currentTarget.getBoundingClientRect();
+                                    const grabOffsetPx = Math.max(0, event.clientX - itemRect.left);
                                     setDropHandled(false);
-                                    setDragState({ id: slide.id, source: 'cue', kind: 'visual' });
+                                    setDragState({ id: slide.id, source: 'cue', kind: 'visual', grabOffsetPx });
                                   }}
                                   onDragEnd={() => {
                                     const shouldRemoveFromTimeline = !dropHandled && canRemoveCueFromTimeline({
@@ -433,11 +440,11 @@ export function PhotoManagerPanel({
                                     }
                                   }}
                                   data-testid={`cue-marker-${slide.id}`}
-                                  className={`absolute top-0 flex cursor-grab flex-col items-center gap-1 ${dragState.id === slide.id ? 'opacity-60' : ''} ${isVideo ? '' : '-translate-x-1/2'}`}
+                                  className={`absolute top-0 flex cursor-grab flex-col items-center gap-1 ${dragState.id === slide.id ? 'opacity-60' : ''}`}
                                   style={{
                                     left: `${leftPercent}%`,
                                     width: blockWidth,
-                                    maxWidth: isVideo ? `calc(100% - ${leftPercent}%)` : undefined,
+                                    maxWidth,
                                   }}
                                 >
                                   <div className={`relative overflow-hidden rounded-lg border ${isActive ? 'border-orange-300/70' : 'border-white/15'} ${isVideo ? 'w-full' : ''}`}>

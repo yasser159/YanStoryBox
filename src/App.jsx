@@ -2,7 +2,7 @@ import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { DiagnosticsScreen } from './components/DiagnosticsScreen';
 import { PhotoManagerPanel } from './components/PhotoManagerPanel';
-import { PlayerControlsBar, StoryPlayerPanel } from './components/StoryPlayerPanel';
+import { PlayerControlsBar, StagePreview, StoryPlayerPanel } from './components/StoryPlayerPanel';
 import { useAudioLibrary } from './hooks/useAudioLibrary';
 import { useSlideLibrary } from './hooks/useSlideLibrary';
 import { useStoryPlayer } from './hooks/useStoryPlayer';
@@ -53,6 +53,7 @@ export default function App() {
     rewindTenSeconds,
     forwardTenSeconds,
     seekTo,
+    timelineDuration,
   } = useStoryPlayer({
     audioSrc,
     audioTimeline,
@@ -60,6 +61,8 @@ export default function App() {
     slides,
   });
   const activeSlide = timeline[playerState.activeSlideIndex] ?? timeline[0];
+  const isInGap = timeline.length > 0 && activeSlide != null &&
+    (playerState.currentTime < activeSlide.startTime || playerState.currentTime >= activeSlide.endTime);
 
   useEffect(() => {
     setPlaybackRunning(playerState.isPlaying);
@@ -126,6 +129,7 @@ export default function App() {
             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
           >
             <div className="mx-auto flex h-full w-full max-w-none flex-col gap-4">
+              <StagePreview activeSlide={activeSlide} isInGap={isInGap} playerState={playerState} />
               <PlayerControlsBar
                 playerState={playerState}
                 togglePlayback={togglePlayback}
@@ -160,7 +164,7 @@ export default function App() {
                 clearAudioClipStartTime={clearAudioClipStartTime}
                 removeAudioClip={removeAudioClip}
                 audioError={audioError}
-                trackDuration={playerState.duration}
+                trackDuration={timelineDuration || playerState.duration}
                 currentTime={playerState.currentTime}
                 onSeekTimeline={seekTo}
                 embedded

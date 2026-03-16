@@ -15,9 +15,10 @@ export function useStoryPlayer({ audioSrc, audioTimeline, durationHint = 0, slid
     error: '',
   });
 
+  const timelineDuration = durationHint || playerState.duration || 0;
   const timeline = useMemo(
-    () => buildTimeline(slides, durationHint || playerState.duration || 0),
-    [durationHint, playerState.duration, slides],
+    () => buildTimeline(slides, timelineDuration),
+    [timelineDuration, slides],
   );
 
   useEffect(() => {
@@ -79,6 +80,7 @@ export function useStoryPlayer({ audioSrc, audioTimeline, durationHint = 0, slid
     audioRef,
     playerState,
     timeline,
+    timelineDuration,
     togglePlayback: () => playerRef.current?.togglePlayback(),
     rewind: () => playerRef.current?.rewind(),
     rewindTenSeconds: () => playerRef.current?.rewindTenSeconds(),

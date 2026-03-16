@@ -6,10 +6,9 @@ function clampCueTime(cueTime, duration) {
   return Math.min(Math.max(0, cueTime), duration);
 }
 
-function clampVideoEndTime(startTime, durationSeconds, nextStartTime, safeDuration) {
+function clampVideoEndTime(startTime, durationSeconds, safeDuration) {
   const nominalEnd = startTime + (Number.isFinite(durationSeconds) ? durationSeconds : 0);
-  const boundedEnd = safeDuration > 0 ? Math.min(nominalEnd, safeDuration) : nominalEnd;
-  return Math.min(boundedEnd, nextStartTime);
+  return safeDuration > 0 ? Math.min(nominalEnd, safeDuration) : nominalEnd;
 }
 
 function buildTimelineItems(slides, duration, { emitLogs }) {
@@ -22,6 +21,7 @@ function buildTimelineItems(slides, duration, { emitLogs }) {
       mediaType: slide.mediaType || 'image',
       durationSeconds: Number.isFinite(slide.durationSeconds) ? slide.durationSeconds : null,
       posterSrc: slide.posterSrc || '',
+      isPinned: Number.isFinite(slide.cueTime),
       cueTime: Number.isFinite(slide.cueTime)
         ? clampCueTime(slide.cueTime, safeDuration)
         : segment * index,
@@ -39,7 +39,7 @@ function buildTimelineItems(slides, duration, { emitLogs }) {
       : safeDuration;
     const isVideo = slide.mediaType === 'video';
     const endTime = isVideo
-      ? clampVideoEndTime(slide.cueTime, slide.durationSeconds, nextStartTime, safeDuration)
+      ? clampVideoEndTime(slide.cueTime, slide.durationSeconds, safeDuration)
       : nextStartTime;
     const spanSeconds = Math.max(0, endTime - slide.cueTime);
 
