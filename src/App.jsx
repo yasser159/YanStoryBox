@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { DiagnosticsScreen } from './components/DiagnosticsScreen';
 import { PhotoManagerPanel } from './components/PhotoManagerPanel';
 import { PlayerControlsBar, StoryPlayerPanel } from './components/StoryPlayerPanel';
 import { useAudioLibrary } from './hooks/useAudioLibrary';
@@ -9,6 +10,7 @@ import { getMediaTypeFromMimeType } from './lib/visualMedia';
 import { selectOverlayVisible, usePresentationUiStore } from './stores/usePresentationUiStore';
 
 export default function App() {
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const overlayVisible = usePresentationUiStore(selectOverlayVisible);
   const updateOverlayFromPointer = usePresentationUiStore((state) => state.updateOverlayFromPointer);
   const hideOverlay = usePresentationUiStore((state) => state.hideOverlay);
@@ -133,7 +135,12 @@ export default function App() {
                 onMediaFilesSelected={handleMediaFilesSelected}
                 isUploadingMedia={isUploadingPhotos || isUploadingAudio}
                 audioMeta={audioMeta}
+                showDiagnostics={showDiagnostics}
+                onToggleDiagnostics={() => setShowDiagnostics((v) => !v)}
               />
+              {showDiagnostics ? (
+                <DiagnosticsScreen />
+              ) : null}
               <PhotoManagerPanel
                 uploads={uploads}
                 audioClips={audioClips}

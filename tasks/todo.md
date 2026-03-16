@@ -1,11 +1,18 @@
 # Task Plan
 
+- [x] Remove the dead export button from the controls bar entirely
+
+- [x] Harden the browser-side video exporter with capability checks, phase updates, and deterministic failure handling
+- [x] Add export state helpers and UI messaging for unsupported, rendering, ready, and error states
+- [x] Verify export success, unsupported-browser handling, and asset-load failure recovery in Chromium
+
 - [x] Inspect the shared read-head and timeline interaction surfaces
 - [x] Move read-head dragging to a dedicated middle-gap handle and stop lane drag hijacking
 - [x] Remove the visual lane title and verify click-to-seek plus handle-drag behavior
 - [x] Make audio clips easier to drag back to true 0 seconds on the lane
 - [x] Raise the shared read-head handle and swap bar waveforms for a continuous wave shape
 - [x] Replace the custom audio waveform renderer with a standard waveform library
+- [x] Add a first-cut export video flow with in-browser render and download
 
 - [x] Review current React app for functional bugs and regressions
 - [x] Verify suspect UI/core interactions in slide, audio, and player flows
@@ -79,6 +86,10 @@
 - UX decision: keep the control bar outside the scroll area and make the timeline stack sticky above a separately scrolling media library.
 - Playback decision: when custom audio clips exist, the global player clock should drive one active audio element that swaps clip sources and offsets underneath, instead of trying to stitch a fake master file.
 - Persistence decision: audio lane state persists as `targetDurationSeconds`, `audioClips`, and computed `audioTimeline`, with local IndexedDB fallback matching the visual library model.
+- Export decision: because this repo has no backend render service yet, v1 video export runs in-browser and downloads a `.webm` file instead of pretending there is a server-side ffmpeg pipeline already waiting backstage.
+- Export hardening decision: browser export now exposes explicit capability gating plus phase-driven status (`preparing`, `loading-assets`, `composing-audio`, `rendering`, `finalizing`) so failure states stop hanging like a busted elevator.
+- Product decision: the export control should be removed from the bar entirely until a real render pipeline exists, instead of teasing users with dead UI.
+- Export testing decision: browser export regression tests should seed a short local story instead of waiting for the full 120-second demo reel, otherwise the test suite ages like milk on the counter.
 
 # Kill List
 
@@ -123,6 +134,10 @@
 - Rejected: forcing exact-pixel drops to hit `0s` on the audio lane. Reason: that makes the left edge feel busted even when the math is technically “correct.”
 - Rejected: rendering audio waveforms as plain bars forever. Reason: once the lane is supposed to feel like a real track, fence-post bars look fake as hell.
 - Rejected: keeping a home-grown SVG waveform once the user explicitly asked for something standard. Reason: custom waveform code is cute until it becomes another maintenance side quest.
+- Rejected: pretending a server-side ffmpeg export exists in this frontend-only repo. Reason: better to ship a real browser-side download than a fake button with Hollywood promises.
+- Rejected: waiting for MediaRecorder `onstart` as the only proof recording began. Reason: Chromium can already be recording while that event acts flaky, so recorder `state` is the real snitch.
+- Rejected: keeping a visible `Export Video` action while the render path is still unreliable against real Firebase-hosted media. Reason: that’s selling wolf tickets in the UI.
+- Rejected: replacing the dead export button with a grey `Not Implemented` tombstone. Reason: dead UI is still dead UI, just wearing different clothes.
 
 # Review
 
@@ -191,11 +206,19 @@
 - Fixed audio-lane drag anchoring so existing clips place by their left edge instead of the mouse hotspot, which was making “move it to 0 seconds” feel fake-broken.
 - Replaced the audio block bars with a mirrored SVG waveform shape and nudged the shared read-head handle upward so it sits cleaner in the gap between the two lanes.
 - Replaced the custom audio waveform renderer with `wavesurfer.js`, boxed behind a dedicated component so the timeline UI stops carrying hand-rolled waveform code.
+- Added a v1 `Export Video` flow that builds a render manifest from the current playback state, renders visuals plus audio in-browser, and exposes a downloadable `.webm`.
+- Hardened the browser-side export runner with capability checks, phase logs, asset/decode timeouts, recorder lifecycle guards, empty-blob rejection, and consistent cleanup for temporary media resources.
+- Removed the dead export action from the controls bar entirely until a real backend or Remotion-based export path exists.
+- Added an export state helper layer so the hook/UI cleanly represent `idle`, `rendering`, `ready`, `unsupported`, and `error` instead of winging it from ad-hoc state blobs.
+- Added Chromium regression coverage for three export paths: successful export to `Download Video`, unsupported-browser disable state, and asset-load failure recovery without UI hang.
 - Added diagnostics for uploaded-but-unplaced audio, active clip selection, source swaps, and composed clip playback events.
 - Added a Chromium regression proving a placed audio clip actually advances the underlying audio element during playback.
 - Verification: `npm run test:unit` passed on 2026-03-15 after the composed audio clock refactor.
 - Verification: `npx playwright test tests/scene-layout.spec.js` passed on 2026-03-15 after the audio playback and large read-head fixes.
 - Verification: `npm run build` passed on 2026-03-15 after the audio playback and large read-head fixes.
+- Verification: `npm run test:unit` passed on 2026-03-15 after the browser export hardening pass.
+- Verification: `npx playwright test tests/scene-layout.spec.js --grep "export video"` passed on 2026-03-15 after fixing the export success, unsupported, and failure-recovery states.
+- Verification: `npm run build` passed on 2026-03-15 after the browser export hardening pass.
 - Verification: `npx playwright test tests/scene-layout.spec.js --grep "shared playhead"` passed on 2026-03-15 after moving the read-head drag handle into the middle gap.
 - Verification: `npm run build` passed on 2026-03-15 after removing the visual lane label and lane-level read-head drag starts.
 - Verification: `npm run build` passed on 2026-03-14 after introducing the shared Zustand UI store.

@@ -173,6 +173,101 @@ async function seedScrollLibrary(page) {
   });
 }
 
+async function seedShortExportStory(page) {
+  await page.addInitScript(({ imageBufferBytes, audioBufferBytes }) => {
+    const imageBlob = new Blob([new Uint8Array(imageBufferBytes)], { type: 'image/png' });
+    const audioBlob = new Blob([new Uint8Array(audioBufferBytes)], { type: 'audio/wav' });
+
+    window.__seedShortExportPromise = new Promise((resolve, reject) => {
+      const request = indexedDB.open('yan-story-teller', 4);
+
+      request.onupgradeneeded = () => {
+        const database = request.result;
+        if (!database.objectStoreNames.contains('uploaded-slides')) {
+          database.createObjectStore('uploaded-slides', { keyPath: 'id' });
+        }
+        if (!database.objectStoreNames.contains('uploaded-audio')) {
+          database.createObjectStore('uploaded-audio', { keyPath: 'id' });
+        }
+      };
+
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const database = request.result;
+        const transaction = database.transaction(['uploaded-slides', 'uploaded-audio'], 'readwrite');
+        const slideStore = transaction.objectStore('uploaded-slides');
+        const audioStore = transaction.objectStore('uploaded-audio');
+
+        transaction.oncomplete = () => {
+          database.close();
+          resolve();
+        };
+        transaction.onerror = () => {
+          database.close();
+          reject(transaction.error);
+        };
+
+        slideStore.clear().onsuccess = () => {
+          slideStore.put({
+            id: 'seed-export-image',
+            title: 'seed-export-image',
+            caption: 'Short export image',
+            fileName: 'seed-export-image.png',
+            mimeType: 'image/png',
+            createdAt: '2026-03-15T00:00:00.000Z',
+            order: 0,
+            mediaType: 'image',
+            durationSeconds: null,
+            posterSrc: '',
+            cueTime: 0,
+            blob: imageBlob,
+          });
+        };
+
+        audioStore.clear().onsuccess = () => {
+          audioStore.put({
+            id: 'presentation-audio-lane',
+            targetDurationSeconds: 2.5,
+            audioClips: [
+              {
+                id: 'seed-export-audio-1',
+                title: 'seed-export-audio-1',
+                fileName: 'seed-export-audio-1.wav',
+                mimeType: 'audio/wav',
+                createdAt: '2026-03-15T00:00:00.000Z',
+                storageMode: 'local',
+                durationSeconds: 2.5,
+                waveformPeaks: Array.from({ length: 48 }, (_, index) => (index % 3 ? 0.25 : 0.78)),
+                desiredStartTime: 0,
+                blob: audioBlob,
+              },
+            ],
+            audioTimeline: [
+              {
+                id: 'seed-export-audio-1',
+                title: 'seed-export-audio-1',
+                fileName: 'seed-export-audio-1.wav',
+                mimeType: 'audio/wav',
+                createdAt: '2026-03-15T00:00:00.000Z',
+                storageMode: 'local',
+                durationSeconds: 2.5,
+                desiredStartTime: 0,
+                startTime: 0,
+                endTime: 2.5,
+                spanSeconds: 2.5,
+                waveformPeaks: Array.from({ length: 48 }, (_, index) => (index % 3 ? 0.25 : 0.78)),
+              },
+            ],
+          });
+        };
+      };
+    });
+  }, {
+    imageBufferBytes: Array.from(screenTestFixture.buffer),
+    audioBufferBytes: Array.from(demoAudioFixture.buffer),
+  });
+}
+
 async function pinControls(page) {
   const viewport = page.viewportSize() || { width: 1400, height: 900 };
   await page.mouse.move(viewport.width / 2, viewport.height / 2);
@@ -392,5 +487,54 @@ test.describe('scene layout', () => {
 
     expect(audioState.paused).toBeFalsy();
     expect(audioState.currentTime).toBeGreaterThan(0.4);
+  });
+
+  test('export video enters rendering and finishes with a download state', async ({ page }) => {
+    test.slow();
+    await seedShortExportStory(page);
+    await page.route(/googleapis\.com/, (route) => route.abort());
+    await page.goto('/');
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await pinControls(page);
+
+    const exportButton = page.getByRole('button', { name: 'Export Video' });
+    await expect(exportButton).toBeVisible();
+    await exportButton.click();
+
+    await expect(page.locator('button').filter({ hasText: /Preparing export|Loading media|Composing audio|Rendering frames/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Download Video' })).toBeVisible({ timeout: 60_000 });
+  });
+
+  test('export video shows unsupported state cleanly when MediaRecorder is unavailable', async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, 'MediaRecorder', {
+        configurable: true,
+        writable: true,
+        value: undefined,
+      });
+    });
+    await page.route(/googleapis\.com/, (route) => route.abort());
+    await page.goto('/');
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await pinControls(page);
+
+    const exportButton = page.getByRole('button', { name: 'Export Unavailable' });
+    await expect(exportButton).toBeDisabled();
+    await expect(page.getByText(/does not support MediaRecorder video export/i)).toBeVisible();
+  });
+
+  test('export video recovers from an asset load failure instead of hanging', async ({ page }) => {
+    await page.route(/googleapis\.com/, (route) => route.abort());
+    await page.goto('/');
+    await page.setViewportSize({ width: 1400, height: 900 });
+    await pinControls(page);
+
+    await page.route('**/images/slide-*.svg', (route) => route.abort());
+
+    const exportButton = page.getByRole('button', { name: 'Export Video' });
+    await exportButton.click();
+
+    await expect(page.getByText(/Failed to fetch image asset|Failed to fetch media asset|Failed to fetch image/i)).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: 'Export Video' })).toBeVisible({ timeout: 5_000 });
   });
 });

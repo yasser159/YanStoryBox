@@ -20,3 +20,5 @@
 - When the browser keeps fighting “drag out to remove,” stop being romantic and switch to explicit removal targets. A fat remove strip plus an `X` button beats chasing HTML5 drag ghosts all night.
 - For timeline placement near `0s`, add a left-edge snap zone instead of demanding pixel-perfect drops. If users say “I can’t get it to the front,” the math is probably being too precious.
 - For dragging an existing timeline block, compute placement from the block's grabbed offset, not just the cursor drop point. Otherwise dropping “at the front” still leaves the clip hanging a few seconds in like it caught its coat on a nail.
+- For browser-side video export, do not trust MediaRecorder `onstart` alone. In Chromium that event can act flaky while `recorder.state` is already `recording`, so capability checks plus state polling are the safer truth source.
+- Browser export regression tests should seed a short local timeline instead of the full demo reel. Making Playwright wait through a two-minute render just to prove a button works is clown math.

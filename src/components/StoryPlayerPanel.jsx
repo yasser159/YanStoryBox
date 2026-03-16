@@ -58,6 +58,8 @@ export function PlayerControlsBar({
   onMediaFilesSelected,
   isUploadingMedia = false,
   audioMeta,
+  showDiagnostics = false,
+  onToggleDiagnostics,
 }) {
   const progress = playerState.duration > 0
     ? Math.min(100, (playerState.currentTime / playerState.duration) * 100)
@@ -137,6 +139,18 @@ export function PlayerControlsBar({
             {isUploadingMedia ? 'Uploading…' : 'Upload Media'}
           </span>
         </UploadPickerButton>
+        <button
+          type="button"
+          onClick={onToggleDiagnostics}
+          className={`inline-flex items-center justify-center rounded-full border px-3 py-2 text-xs font-semibold transition ${
+            showDiagnostics
+              ? 'border-orange-400/40 bg-orange-400/15 text-orange-300 hover:bg-orange-400/25'
+              : 'border-white/15 bg-white/10 text-stone-300 hover:bg-white/20'
+          }`}
+          aria-label="Toggle diagnostics"
+        >
+          Diagnostics
+        </button>
       </div>
       <AnimatePresence initial={false}>
         {isUploadingMedia ? (
